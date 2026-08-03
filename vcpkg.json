@@ -1,0 +1,11 @@
+{
+  "name": "dailyreport",
+  "version": "1.0.0",
+  "description": "Windows desktop app for automatic developer activity tracking and daily/weekly report generation",
+  "dependencies": [
+    "qt6",
+    "spdlog",
+    "nlohmann-json"
+  ],
+  "builtin-baseline": "a42af01ec7e074ae7a6d4e8dc81a58e36b88ff3f"
+}
