@@ -1,0 +1,73 @@
+# ── Build output ──────────────────────────────────
+build/
+out/
+obj/
+*.dir/
+
+# ── CMake generated ───────────────────────────────
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+Makefile
+*.cmake
+!cmake/**/*.cmake
+
+# ── MSVC / Visual Studio ──────────────────────────
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.pdb
+*.ilk
+*.exp
+*.iobj
+*.ipdb
+*.pgc
+*.pgd
+*.meta
+.vs/
+
+# ── Qt / Qt Creator ───────────────────────────────
+*.pro.user
+*.qmlc
+*.jsc
+*.moc
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+*.qm
+Makefile
+
+# ── Editors & IDEs ────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.autosave
+
+# ── OS junk ───────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ── Dependencies ──────────────────────────────────
+vcpkg_installed/
+
+# ── Logs & runtime data ───────────────────────────
+*.log
+logs/
+
+# ── Misc ──────────────────────────────────────────
+*.tmp
+*.temp
+*.bak
+*.orig

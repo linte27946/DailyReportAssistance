@@ -2,10 +2,7 @@
 #include <QRegularExpression>
 #include <QStringList>
 
-namespace {
-// Forward-declared helper for inline formatting in simpleMarkdownToHtml
-QString processInlineFormatting(const QString &text);
-}
+QString MarkdownRenderer::toHtml(const QString &markdown)
 {
     return simpleMarkdownToHtml(markdown);
 }

@@ -1,9 +1,13 @@
 #pragma once
 
 #include <QObject>
+#include <QDate>
 #include <QMap>
+#include <QPair>
 #include <QString>
 #include <QVariantMap>
+#include "core/Event.h"
+#include "core/Timeline.h"
 #include "llm/PromptTemplate.h"
 
 /// Manages report templates: loading, editing, and rendering.

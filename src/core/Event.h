@@ -3,6 +3,7 @@
 #include <QString>
 #include <QDateTime>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QDataStream>
 #include <cstdint>

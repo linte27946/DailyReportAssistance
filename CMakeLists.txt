@@ -10,7 +10,7 @@ set(CMAKE_AUTOUIC ON)
 # Windows-specific flags
 if(WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8 /MP")
-    add_definitions(-DWIN32_LEAN_AND_MEAN -DNOMINMAX -DUNICODE -D_UNICODE)
+    add_definitions(-DNOMINMAX -DUNICODE -D_UNICODE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:WINDOWS")
 endif()
 
@@ -39,6 +39,7 @@ qt_add_resources(RESOURCES_QRC src/ui/resources/resources.qrc)
 # Main executable
 add_executable(DailyReport
     src/main.cpp
+    src/app/Application.h
     ${RESOURCES_QRC}
 )
 
@@ -52,7 +53,7 @@ target_link_libraries(DailyReport PRIVATE
     dailyreport_storage
     dailyreport_core
     dailyreport_util
-    Qt6::Core Qt6::Widgets Qt6::Network Qt6::Sql
+    Qt6::Core Qt6::Widgets Qt6::Network Qt6::Sql Qt6::EntryPointPrivate
     spdlog::spdlog
     nlohmann_json::nlohmann_json
 )

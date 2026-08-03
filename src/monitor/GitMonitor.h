@@ -35,7 +35,7 @@ private:
     QStringList findRepositories(const QStringList &watchPaths);
 
     /// Parse git log output into events.
-    static QList<RawEvent> parseGitLog(const QString &output, const QString &repoPath);
+    QList<RawEvent> parseGitLog(const QString &output, const QString &repoPath);
 
     QTimer *m_pollTimer = nullptr;
     QStringList m_repoPaths;

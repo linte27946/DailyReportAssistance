@@ -1,4 +1,5 @@
 #include "BuildMonitor.h"
+#include <QFileInfo>
 #include <spdlog/spdlog.h>
 
 const QSet<QString> &BuildMonitor::buildProcesses()
@@ -65,8 +66,7 @@ void BuildMonitor::stop()
         event.source = "BuildMonitor";
         event.processName = build.processName;
         event.description = QString("Build process ended (monitor stopping): %1 (PID: %2)")
-                                .arg(build.processName).arg(build.pid);
-        event.durationSecs = durationSecs;
+                                .arg(build.processName).arg(static_cast<ulong>(build.pid));
         event.metadata["pid"] = (qint64)build.pid;
         event.metadata["durationSecs"] = durationSecs;
         event.metadata["stoppedBySystem"] = true;
@@ -87,9 +87,9 @@ void BuildMonitor::onProcessEvent(const RawEvent &event)
     if (!buildProcesses().contains(procName)) return;
 
 #ifdef _WIN32
-    bool ok = false;
-    DWORD pid = static_cast<DWORD>(event.metadata["pid"].toInt(&ok));
-    if (!ok || pid == 0) return;
+    int pidInt = event.metadata["pid"].toInt(-1);
+    if (pidInt <= 0) return;
+    DWORD pid = static_cast<DWORD>(pidInt);
 
     if (event.type == EventType::ProcessStarted) {
         // New build process started
@@ -112,7 +112,7 @@ void BuildMonitor::onProcessEvent(const RawEvent &event)
         buildEvent.type = EventType::BuildStarted;
         buildEvent.source = "BuildMonitor";
         buildEvent.processName = procName;
-        buildEvent.description = QString("Build started: %1 (PID: %2)").arg(procName).arg(pid);
+        buildEvent.description = QString("Build started: %1 (PID: %2)").arg(procName).arg(static_cast<ulong>(pid));
         buildEvent.metadata["pid"] = (qint64)pid;
         buildEvent.metadata["workingDir"] = build.workingDir;
         buildEvent.metadata["buildCountToday"] = m_buildCountToday;
@@ -136,7 +136,6 @@ void BuildMonitor::onProcessEvent(const RawEvent &event)
         buildEvent.type = EventType::BuildCompleted;
         buildEvent.source = "BuildMonitor";
         buildEvent.processName = build.processName;
-        buildEvent.durationSecs = durationSecs;
 
         if (success) {
             buildEvent.description = QString("Build completed successfully: %1 (%2s)")

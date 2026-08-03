@@ -1,8 +1,3 @@
-add_test(NAME test_event_classifier COMMAND test_event_classifier)
-add_test(NAME test_pipeline COMMAND test_pipeline)
-add_test(NAME test_database COMMAND test_database)
-add_test(NAME test_template_engine COMMAND test_template_engine)
-
 function(add_dailyreport_test name sources)
     add_executable(${name} ${sources})
     target_link_libraries(${name} PRIVATE
@@ -12,9 +7,14 @@ function(add_dailyreport_test name sources)
         dailyreport_llm
         dailyreport_report
         dailyreport_util
-        Qt6::Core Qt6::Test Qt6::Sql
+        Qt6::Core Qt6::Test Qt6::Sql Qt6::EntryPointPrivate
         spdlog::spdlog
     )
+    if(WIN32)
+        set_target_properties(${name} PROPERTIES
+            WIN32_EXECUTABLE FALSE
+        )
+    endif()
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 

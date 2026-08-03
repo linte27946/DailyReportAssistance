@@ -1,5 +1,7 @@
 #include "EventFilter.h"
+#include <QDir>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <spdlog/spdlog.h>
 
 EventFilter::EventFilter(QObject *parent)
@@ -98,8 +100,9 @@ bool EventFilter::isIgnoredPath(const QString &path) const
 {
     QString normalized = QDir::toNativeSeparators(path);
     for (const auto &pattern : m_ignoredPathPatterns) {
-        QRegExp regex(QRegExp::wildcardToRegExp(pattern), Qt::CaseInsensitive);
-        if (regex.exactMatch(QFileInfo(path).fileName()))
+        QRegularExpression regex(QRegularExpression::wildcardToRegularExpression(pattern),
+                                  QRegularExpression::CaseInsensitiveOption);
+        if (regex.match(QFileInfo(path).fileName()).hasMatch())
             return true;
         if (normalized.contains(pattern, Qt::CaseInsensitive))
             return true;

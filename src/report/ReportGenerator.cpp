@@ -3,6 +3,8 @@
 #include "storage/EventRepository.h"
 #include "storage/ReportRepository.h"
 #include <QFutureInterface>
+#include <QTimer>
+#include <QtConcurrent/QtConcurrent>
 #include <spdlog/spdlog.h>
 
 ReportGenerator::ReportGenerator(TemplateEngine *templateEngine,

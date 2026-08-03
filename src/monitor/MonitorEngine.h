@@ -1,8 +1,8 @@
 #pragma once
 
 #include <QObject>
-#include <QList>
 #include <QThread>
+#include <vector>
 #include <memory>
 #include "IMonitor.h"
 
@@ -54,6 +54,6 @@ private:
         QThread *thread = nullptr;
     };
 
-    QList<MonitorEntry> m_monitors;
+    std::vector<MonitorEntry> m_monitors;
     bool m_running = false;
 };

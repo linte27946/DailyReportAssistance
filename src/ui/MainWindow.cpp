@@ -12,6 +12,7 @@
 #include <QToolBar>
 #include <QCloseEvent>
 #include <QApplication>
+#include <QMessageBox>
 #include <spdlog/spdlog.h>
 
 MainWindow::MainWindow(TemplateEngine *templateEngine,

@@ -1,9 +1,9 @@
 add_library(dailyreport_llm STATIC
+    ILlmBackend.h
     LlmClient.cpp
     OpenAiBackend.cpp
     AnthropicBackend.cpp
     OllamaBackend.cpp
-    PromptTemplate.cpp
 )
 
 target_include_directories(dailyreport_llm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

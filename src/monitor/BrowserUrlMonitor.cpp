@@ -170,7 +170,7 @@ QString BrowserUrlMonitor::getBrowserUrl(HWND hwnd)
     // Different browsers expose the address bar differently
     if (!s_instance_for_automation) return {};
 
-    IUIAutomation *automation = s_instance_for_automation;
+    IUIAutomation *automation = s_instance_for_automation->m_automation;
     if (!automation) return {};
 
     IUIAutomationElement *element = nullptr;
@@ -200,7 +200,7 @@ QString BrowserUrlMonitor::getBrowserUrl(HWND hwnd)
     }
 
     int count = 0;
-    editElements->get_Count(&count);
+    editElements->get_Length(&count);
 
     QString url;
     for (int i = 0; i < count && url.isEmpty(); ++i) {
@@ -234,8 +234,5 @@ QString BrowserUrlMonitor::getBrowserUrl(HWND hwnd)
     element->Release();
     return url;
 }
-
-// Static pointer to the current instance for UI Automation callbacks
-BrowserUrlMonitor *BrowserUrlMonitor::s_instance_for_automation = nullptr;
 
 #endif // _WIN32

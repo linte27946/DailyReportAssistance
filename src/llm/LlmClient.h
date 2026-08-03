@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QObject>
-#include <QMap>
+#include <map>
 #include <QString>
 #include <QFuture>
 #include <memory>
@@ -47,6 +47,6 @@ signals:
     void generationError(const QString &errorMessage);
 
 private:
-    QMap<QString, std::unique_ptr<ILlmBackend>> m_backends;
+    std::map<QString, std::unique_ptr<ILlmBackend>> m_backends;
     QString m_activeName;
 };

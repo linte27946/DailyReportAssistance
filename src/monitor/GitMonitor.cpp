@@ -1,5 +1,6 @@
 #include "GitMonitor.h"
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <spdlog/spdlog.h>
 

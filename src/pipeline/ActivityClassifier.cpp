@@ -1,6 +1,7 @@
 #include "ActivityClassifier.h"
 #include <QFileInfo>
 #include <QDir>
+#include <QRegularExpression>
 #include <spdlog/spdlog.h>
 
 ActivityClassifier::ActivityClassifier(QObject *parent)
@@ -202,8 +203,8 @@ EventCategory ActivityClassifier::classifyInternal(const RawEvent &raw)
         // Check process name match (case-insensitive)
         if (!rule.processName.isEmpty()) {
             if (!raw.processName.isEmpty() &&
-                !QRegExp(QRegExp::wildcardToRegExp(rule.processName),
-                         Qt::CaseInsensitive).exactMatch(raw.processName))
+                !QRegularExpression(QRegularExpression::wildcardToRegularExpression(rule.processName),
+                         QRegularExpression::CaseInsensitiveOption).match(raw.processName).hasMatch())
                 continue;
         }
 
@@ -217,8 +218,8 @@ EventCategory ActivityClassifier::classifyInternal(const RawEvent &raw)
         if (!rule.urlPattern.isEmpty()) {
             if (raw.url.isEmpty())
                 continue;
-            QRegExp urlRegex(QRegExp::wildcardToRegExp(rule.urlPattern), Qt::CaseInsensitive);
-            if (!urlRegex.exactMatch(raw.url) && !raw.url.contains(rule.urlPattern, Qt::CaseInsensitive))
+            QRegularExpression urlRegex(QRegularExpression::wildcardToRegularExpression(rule.urlPattern), QRegularExpression::CaseInsensitiveOption);
+            if (!urlRegex.match(raw.url).hasMatch() && !raw.url.contains(rule.urlPattern, Qt::CaseInsensitive))
                 continue;
         }
 

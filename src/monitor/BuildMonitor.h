@@ -5,6 +5,10 @@
 #include <QSet>
 #include <QTimer>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 /// Detects build/compilation activity by monitoring process creation.
 /// Listens for known compiler/ build tool processes and tracks their durations.
 class BuildMonitor : public IMonitor {

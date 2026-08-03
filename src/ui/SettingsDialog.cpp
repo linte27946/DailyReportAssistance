@@ -7,6 +7,8 @@
 #include <QPushButton>
 #include <QFileDialog>
 #include <QLabel>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QMessageBox>
 #include <spdlog/spdlog.h>
 
@@ -234,7 +236,8 @@ void SettingsDialog::saveSettings()
     for (int i = 0; i < m_projectPathsList->count(); ++i) {
         paths.append(m_projectPathsList->item(i)->text());
     }
-    QJsonDocument doc(paths);
+    QJsonDocument doc;
+    doc.setArray(paths);
     m_settings->setValue("monitored_paths",
                          QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
 

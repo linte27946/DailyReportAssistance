@@ -49,7 +49,7 @@ void MonitorEngine::registerMonitor(std::unique_ptr<IMonitor> monitor)
                              entry.monitor->name().toStdString());
             });
 
-    m_monitors.append(std::move(entry));
+    m_monitors.push_back(std::move(entry));
 }
 
 bool MonitorEngine::startAll()
@@ -59,7 +59,7 @@ bool MonitorEngine::startAll()
         return true;
     }
 
-    if (m_monitors.isEmpty()) {
+    if (m_monitors.empty()) {
         spdlog::warn("No monitors registered.");
         m_running = true;
         return true;

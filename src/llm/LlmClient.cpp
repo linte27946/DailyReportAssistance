@@ -50,7 +50,11 @@ bool LlmClient::setActiveBackend(const QString &name)
 
 QStringList LlmClient::availableBackends() const
 {
-    return m_backends.keys();
+    QStringList result;
+    for (const auto &pair : m_backends) {
+        result.append(pair.first);
+    }
+    return result;
 }
 
 bool LlmClient::configureBackend(const QString &name, const LlmConfig &config)
@@ -77,12 +81,13 @@ QFuture<QString> LlmClient::generateReport(const QString &systemPrompt,
 
 bool LlmClient::hasAvailableBackend() const
 {
-    return !m_backends.isEmpty() && m_backends.contains(m_activeName);
+    return !m_backends.empty() && m_backends.contains(m_activeName);
 }
 
 ILlmBackend *LlmClient::activeBackendPtr() const
 {
-    if (m_backends.contains(m_activeName))
-        return m_backends[m_activeName].get();
+    auto it = m_backends.find(m_activeName);
+    if (it != m_backends.end())
+        return it->second.get();
     return nullptr;
 }
