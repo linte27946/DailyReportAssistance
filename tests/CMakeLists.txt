@@ -7,10 +7,11 @@ function(add_dailyreport_test name sources)
         dailyreport_llm
         dailyreport_report
         dailyreport_util
-        Qt6::Core Qt6::Test Qt6::Sql Qt6::EntryPointPrivate
+        Qt6::Core Qt6::Test Qt6::Sql
         spdlog::spdlog
     )
     if(WIN32)
+        target_link_libraries(${name} PRIVATE Qt6::EntryPointPrivate)
         set_target_properties(${name} PROPERTIES
             WIN32_EXECUTABLE FALSE
         )

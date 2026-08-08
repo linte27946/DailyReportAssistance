@@ -235,4 +235,11 @@ QString BrowserUrlMonitor::getBrowserUrl(HWND hwnd)
     return url;
 }
 
+#else
+
+QString BrowserUrlMonitor::getBrowserUrl(void *)
+{
+    return {};
+}
+
 #endif // _WIN32

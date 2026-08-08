@@ -34,7 +34,11 @@ private:
     void pollBrowserUrl();
 
     /// Try to get the URL from a browser window using UI Automation.
+#ifdef _WIN32
     static QString getBrowserUrl(HWND hwnd);
+#else
+    static QString getBrowserUrl(void *hwnd);
+#endif
 
     /// Check if a window belongs to a known browser.
     static bool isBrowserWindow(const QString &processName);

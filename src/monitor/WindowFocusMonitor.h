@@ -23,19 +23,33 @@ public:
 
     /// Get the current foreground window information.
     struct WindowInfo {
+#ifdef _WIN32
         HWND hwnd = nullptr;
+#else
+        void *hwnd = nullptr;
+#endif
         QString title;
         QString processName;
         QString processPath;
+#ifdef _WIN32
         DWORD processId = 0;
+#else
+        qint64 processId = 0;
+#endif
     };
 
     static WindowInfo getForegroundWindowInfo();
 
 private:
+#ifdef _WIN32
     static QString getWindowTitle(HWND hwnd);
     static QString getWindowProcessName(HWND hwnd, DWORD *outPid = nullptr);
     static QString getWindowProcessPath(HWND hwnd);
+#else
+    static QString getWindowTitle(void *hwnd);
+    static QString getWindowProcessName(void *hwnd, qint64 *outPid = nullptr);
+    static QString getWindowProcessPath(void *hwnd);
+#endif
 
 #ifdef _WIN32
     static void CALLBACK winEventHookProc(HWINEVENTHOOK hWinEventHook,
@@ -44,7 +58,6 @@ private:
                                           DWORD dwEventThread, DWORD dwmsEventTime);
 
     HWINEVENTHOOK m_hook = nullptr;
-    // We use a static pointer to route callbacks to the instance
     static WindowFocusMonitor *s_instance;
 #endif
 };

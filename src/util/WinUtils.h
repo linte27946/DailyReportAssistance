@@ -2,7 +2,14 @@
 
 #include <QString>
 #include <QSettings>
+#include <QStandardPaths>
+#include <QCoreApplication>
+#include <QDir>
 #include <spdlog/spdlog.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 /// Windows-specific utility functions.
 namespace WinUtils {
@@ -44,7 +51,7 @@ inline QString applicationFilePath()
 /// Check if the application is running as administrator.
 inline bool isRunningAsAdmin()
 {
-    // Simplified check using the Windows API
+#ifdef _WIN32
     BOOL isElevated = FALSE;
     HANDLE hToken = nullptr;
     if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
@@ -56,6 +63,9 @@ inline bool isRunningAsAdmin()
         CloseHandle(hToken);
     }
     return isElevated != FALSE;
+#else
+    return false;
+#endif
 }
 
 /// Get the path to the user's documents folder.
@@ -67,7 +77,6 @@ inline QString documentsPath()
 /// Get the friendly name of the Windows version.
 inline QString windowsVersionString()
 {
-    // Use QSysInfo for basic version info
     return QSysInfo::prettyProductName();
 }
 

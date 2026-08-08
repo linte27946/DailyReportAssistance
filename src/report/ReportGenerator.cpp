@@ -25,7 +25,7 @@ QFuture<ReportResult> ReportGenerator::generateDailyReport(const QDate &date)
     auto *fi = new QFutureInterface<ReportResult>();
     fi->reportStarted();
 
-    QtConcurrent::run([this, fi, date]() {
+    (void)QtConcurrent::run([this, fi, date]() {
         ReportResult result = doGenerate(date, "daily");
         fi->reportResult(result);
         fi->reportFinished();
@@ -40,7 +40,7 @@ QFuture<ReportResult> ReportGenerator::generateWeeklyReport(const QDate &date)
     auto *fi = new QFutureInterface<ReportResult>();
     fi->reportStarted();
 
-    QtConcurrent::run([this, fi, date]() {
+    (void)QtConcurrent::run([this, fi, date]() {
         ReportResult result = doGenerate(date, "weekly");
         fi->reportResult(result);
         fi->reportFinished();

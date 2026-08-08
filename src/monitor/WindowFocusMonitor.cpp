@@ -178,4 +178,21 @@ QString WindowFocusMonitor::getWindowProcessPath(HWND hwnd)
     return {};
 }
 
+#else // __linux__
+
+QString WindowFocusMonitor::getWindowTitle(void *)
+{
+    return {};
+}
+
+QString WindowFocusMonitor::getWindowProcessName(void *, qint64 *)
+{
+    return {};
+}
+
+QString WindowFocusMonitor::getWindowProcessPath(void *)
+{
+    return {};
+}
+
 #endif // _WIN32

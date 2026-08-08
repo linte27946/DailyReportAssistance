@@ -9,7 +9,7 @@
 #endif
 
 /// Ensures only one instance of the application runs at a time.
-/// Uses a named Windows mutex as the primary guard.
+/// Uses a named Windows mutex.
 class SingleInstance {
 public:
     explicit SingleInstance(const QString &name)
@@ -45,7 +45,7 @@ public:
         m_locked = true;
         return true;
 #else
-        // Non-Windows: always succeed (for cross-platform compilation only)
+        // Non-Windows stub (for cross-compilation only)
         m_locked = true;
         return true;
 #endif
@@ -68,11 +68,9 @@ public:
     void notifyExistingInstance()
     {
 #ifdef _WIN32
-        // Find the existing window by class name or title
         HWND hwnd = FindWindowW(nullptr, L"DailyReport");
         if (hwnd) {
             spdlog::info("Found existing DailyReport window, bringing to foreground.");
-            // Restore if minimized
             if (IsIconic(hwnd)) {
                 ShowWindow(hwnd, SW_RESTORE);
             }

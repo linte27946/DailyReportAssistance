@@ -159,6 +159,7 @@ QMap<QString, QString> TemplateEngine::buildWeeklyContext(
     const Timeline &weekTimeline,
     const QDate &weekStart)
 {
+    Q_UNUSED(weekTimeline);
     QMap<QString, QString> ctx;
 
     ctx["week_start"] = weekStart.toString("yyyy-MM-dd");

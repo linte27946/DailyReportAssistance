@@ -210,6 +210,22 @@ QString ProcessMonitor::getProcessCommandLine(DWORD processId)
     return {};
 }
 
+#else
+
+QString ProcessMonitor::getProcessPath(qint64)
+{
+    return {};
+}
+
+QString ProcessMonitor::getProcessCommandLine(qint64)
+{
+    return {};
+}
+
+#endif
+
+#ifdef _WIN32
+
 bool ProcessMonitor::initWmi()
 {
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);

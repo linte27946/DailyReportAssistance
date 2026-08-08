@@ -14,22 +14,28 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(STATUS "Build type not specified, defaulting to Release")
 endif()
 
-# Windows-specific flags
-if(WIN32)
+# ── Platform-specific flags ─────────────────────────
+if(MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8 /MP")
     add_definitions(-DNOMINMAX -DUNICODE -D_UNICODE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:WINDOWS")
+elseif(MINGW)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -mwindows")
+    add_definitions(-DNOMINMAX -DUNICODE -D_UNICODE)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
+else()
+    # Native Unix build (for development/testing only — monitors will be stubs)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic")
 endif()
 
-# Dependencies via find_package
+# ── Dependencies ────────────────────────────────────
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Sql)
 find_package(spdlog REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
-# Include paths
 include_directories(${CMAKE_SOURCE_DIR}/src)
 
-# Subdirectories in dependency order
+# ── Subdirectories ──────────────────────────────────
 add_subdirectory(src/util)
 add_subdirectory(src/core)
 add_subdirectory(src/storage)
@@ -40,10 +46,10 @@ add_subdirectory(src/report)
 add_subdirectory(src/app)
 add_subdirectory(src/ui)
 
-# Resource file
+# ── Resources ───────────────────────────────────────
 qt_add_resources(RESOURCES_QRC src/ui/resources/resources.qrc)
 
-# Main executable
+# ── Main executable ─────────────────────────────────
 add_executable(DailyReport
     src/main.cpp
     src/app/Application.h
@@ -60,12 +66,17 @@ target_link_libraries(DailyReport PRIVATE
     dailyreport_storage
     dailyreport_core
     dailyreport_util
-    Qt6::Core Qt6::Widgets Qt6::Network Qt6::Sql Qt6::EntryPointPrivate
+    Qt6::Core Qt6::Widgets Qt6::Network Qt6::Sql
     spdlog::spdlog
     nlohmann_json::nlohmann_json
 )
 
-# Windows-specific system libraries
+# Qt6::EntryPointPrivate only exists on Windows (MSVC/MINGW)
+if(WIN32)
+    target_link_libraries(DailyReport PRIVATE Qt6::EntryPointPrivate)
+endif()
+
+# ── Windows system libraries ────────────────────────
 if(WIN32)
     target_link_libraries(DailyReport PRIVATE
         advapi32      # DPAPI (CryptProtectData)
@@ -77,10 +88,10 @@ if(WIN32)
     )
 endif()
 
-# Install rules
+# ── Install ─────────────────────────────────────────
 install(TARGETS DailyReport RUNTIME DESTINATION bin)
 
-# Tests
+# ── Tests ───────────────────────────────────────────
 option(BUILD_TESTS "Build unit tests" ON)
 if(BUILD_TESTS)
     enable_testing()
@@ -92,18 +103,25 @@ endif()
 #  Convenience targets
 # ═══════════════════════════════════════════════════════
 
-# ---- locate Qt plugin dir (vcpkg) --------------------
-set(QT_PLUGIN_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/Qt6/plugins"
-    CACHE PATH "Qt6 plugins directory")
-set(QT_BIN_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
-    CACHE PATH "Qt6 runtime DLLs directory")
-
-# ---- deploy : copy Qt plugins & runtime DLLs ---------
-add_custom_target(deploy
-    COMMENT "Deploying Qt plugins and runtime DLLs..."
-)
+# ---- deploy : copy Qt plugins & runtime DLLs -------
 if(WIN32)
-    # platform plugin (must-have)
+    if(MINGW)
+        set(VCPKG_TRIPLET "x64-mingw-static")
+    else()
+        set(VCPKG_TRIPLET "x64-windows")
+    endif()
+endif()
+
+if(WIN32)
+    set(QT_PLUGIN_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TRIPLET}/Qt6/plugins"
+        CACHE PATH "Qt6 plugins directory")
+    set(QT_BIN_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TRIPLET}/bin"
+        CACHE PATH "Qt6 runtime DLLs directory")
+
+    add_custom_target(deploy
+        COMMENT "Deploying Qt plugins and runtime DLLs..."
+    )
+
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:DailyReport>/platforms"
@@ -111,7 +129,6 @@ if(WIN32)
             "${QT_PLUGIN_DIR}/platforms/qwindows$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/platforms/"
     )
-    # SQL drivers
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:DailyReport>/sqldrivers"
@@ -119,7 +136,6 @@ if(WIN32)
             "${QT_PLUGIN_DIR}/sqldrivers/qsqlite$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/sqldrivers/"
     )
-    # styles
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:DailyReport>/styles"
@@ -127,7 +143,6 @@ if(WIN32)
             "${QT_PLUGIN_DIR}/styles/qmodernwindowsstyle$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/styles/"
     )
-    # image formats (jpeg, gif, ico)
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:DailyReport>/imageformats"
@@ -137,7 +152,6 @@ if(WIN32)
             "${QT_PLUGIN_DIR}/imageformats/qico$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/imageformats/"
     )
-    # TLS backends (needed for QtNetwork / HTTPS)
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:DailyReport>/tls"
@@ -147,7 +161,6 @@ if(WIN32)
             "${QT_PLUGIN_DIR}/tls/qcertonlybackend$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/tls/"
     )
-    # network information
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:DailyReport>/networkinformation"
@@ -155,7 +168,6 @@ if(WIN32)
             "${QT_PLUGIN_DIR}/networkinformation/qnetworklistmanager$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/networkinformation/"
     )
-    # extra runtime DLLs (Qt6Network, OpenSSL, etc.)
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${QT_BIN_DIR}/Qt6Network$<$<CONFIG:Debug>:d>.dll"
@@ -165,53 +177,24 @@ if(WIN32)
     message(STATUS "Deploy target configured — run: cmake --build build --target deploy")
 endif()
 
-# ---- run : build + deploy + launch -------------------
-add_custom_target(run
-    COMMENT "Building, deploying, and launching DailyReport..."
-)
-if(WIN32)
-    add_custom_command(TARGET run POST_BUILD
-        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --config $<CONFIG>
-        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --config $<CONFIG> --target deploy
-        COMMAND "$<TARGET_FILE:DailyReport>"
-    )
-endif()
-
-# ---- check : build + run tests -----------------------
-add_custom_target(check
-    COMMENT "Building and running tests..."
-)
-add_custom_command(TARGET check POST_BUILD
-    COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --config $<CONFIG>
-    COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR}
-        --build-config $<CONFIG> --output-on-failure
-)
-
-# ---- clean-all : remove build outputs, keep CMake cache
+# ---- clean-all : remove build outputs, keep cache---
 add_custom_target(clean-all
     COMMENT "Cleaning build outputs (keeping CMake cache)..."
-    COMMAND ${CMAKE_COMMAND} -E remove_directory
-        "${CMAKE_BINARY_DIR}/Release"
-    COMMAND ${CMAKE_COMMAND} -E remove_directory
-        "${CMAKE_BINARY_DIR}/Debug"
-    COMMAND ${CMAKE_COMMAND} -E remove_directory
-        "${CMAKE_BINARY_DIR}/RelWithDebInfo"
-    COMMAND ${CMAKE_COMMAND} -E remove_directory
-        "${CMAKE_BINARY_DIR}/MinSizeRel"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_BINARY_DIR}/Release"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_BINARY_DIR}/Debug"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_BINARY_DIR}/RelWithDebInfo"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_BINARY_DIR}/MinSizeRel"
     COMMAND ${CMAKE_COMMAND} -E echo "Build cleaned. CMake cache preserved."
-    COMMAND ${CMAKE_COMMAND} -E echo "Re-run: cmake --build build --config Release"
 )
 
-# ---- distclean : remove entire build directory --------
+# ---- distclean --------------------------------------
 add_custom_target(distclean
     COMMENT "Removing entire build directory..."
-    COMMAND ${CMAKE_COMMAND} -E echo "Removing ${CMAKE_BINARY_DIR} ..."
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_BINARY_DIR}"
     COMMAND ${CMAKE_COMMAND} -E echo "Done."
-    COMMAND ${CMAKE_COMMAND} -E echo "Re-run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=..."
 )
 
-# ---- format : clang-format all source files ----------
+# ---- format -----------------------------------------
 find_program(CLANG_FORMAT NAMES clang-format clang-format-18 clang-format-17)
 if(CLANG_FORMAT)
     file(GLOB_RECURSE ALL_SOURCE_FILES
@@ -221,24 +204,20 @@ if(CLANG_FORMAT)
         "${CMAKE_SOURCE_DIR}/tests/**/*.h"
     )
     add_custom_target(format
-        COMMENT "Formatting source files with clang-format..."
+        COMMENT "Formatting source files..."
         COMMAND ${CLANG_FORMAT} -i ${ALL_SOURCE_FILES}
     )
-    message(STATUS "Format target configured — run: cmake --build build --target format")
-else()
-    message(STATUS "clang-format not found, 'format' target disabled")
+    message(STATUS "format target configured")
 endif()
 
-# ---- targets : print available convenience targets ------
+# ---- targets ----------------------------------------
 add_custom_target(targets
     COMMAND ${CMAKE_COMMAND} -E echo ""
-    COMMAND ${CMAKE_COMMAND} -E echo "  Available convenience targets:"
-    COMMAND ${CMAKE_COMMAND} -E echo "    deploy      Copy Qt plugins + DLLs to output directory"
-    COMMAND ${CMAKE_COMMAND} -E echo "    run         Build + deploy + launch the app"
-    COMMAND ${CMAKE_COMMAND} -E echo "    check       Build + run unit tests"
+    COMMAND ${CMAKE_COMMAND} -E echo "  Available targets:"
+    COMMAND ${CMAKE_COMMAND} -E echo "    deploy      Copy Qt plugins + DLLs to output"
     COMMAND ${CMAKE_COMMAND} -E echo "    clean-all   Remove build outputs, keep CMake cache"
     COMMAND ${CMAKE_COMMAND} -E echo "    distclean   Remove entire build directory"
-    COMMAND ${CMAKE_COMMAND} -E echo "    format      Run clang-format on all source files"
+    COMMAND ${CMAKE_COMMAND} -E echo "    format      Run clang-format on all sources"
     COMMAND ${CMAKE_COMMAND} -E echo "    targets     Show this message"
     COMMAND ${CMAKE_COMMAND} -E echo ""
 )

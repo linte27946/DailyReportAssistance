@@ -124,7 +124,7 @@ public:
             "       llm_backend, llm_model, generation_time_secs, token_count, created_at "
             "FROM reports WHERE id = :id"
         );
-        query.bindValue(":id", id);
+        query.bindValue(":id", static_cast<qlonglong>(id));
 
         if (query.exec() && query.next()) {
             r.id = query.value("id").toLongLong();
@@ -163,7 +163,7 @@ public:
         auto db = Database::instance().connection();
         QSqlQuery query(db);
         query.prepare("DELETE FROM reports WHERE id = :id");
-        query.bindValue(":id", id);
+        query.bindValue(":id", static_cast<qlonglong>(id));
 
         if (!query.exec()) {
             spdlog::error("Failed to delete report: {}",

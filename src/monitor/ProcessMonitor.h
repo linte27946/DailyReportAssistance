@@ -33,20 +33,28 @@ public:
 
 private:
     void pollProcesses();
+#ifdef _WIN32
     static QString getProcessPath(DWORD processId);
     static QString getProcessCommandLine(DWORD processId);
+#else
+    static QString getProcessPath(qint64 processId);
+    static QString getProcessCommandLine(qint64 processId);
+#endif
 
 #ifdef _WIN32
     bool initWmi();
     void cleanupWmi();
     IWbemServices *m_pSvc = nullptr;
     IWbemLocator *m_pLoc = nullptr;
+    using PidType = DWORD;
+#else
+    using PidType = qint64;
 #endif
 
     QTimer *m_pollTimer = nullptr;
     QSet<QString> m_trackedProcesses;
-    QSet<DWORD> m_knownProcessIds;  // Track PIDs we've already seen
-    QMap<DWORD, QDateTime> m_processStartTimes;
+    QSet<PidType> m_knownProcessIds;  // Track PIDs we've already seen
+    QMap<PidType, QDateTime> m_processStartTimes;
 
     // Default set of developer-relevant processes
     static QSet<QString> defaultTrackedProcesses();

@@ -127,6 +127,7 @@ void SystemTray::onGenerateWeeklyReport()
 
 void SystemTray::onReportGenerated(const QString &type, const QDate &date, const QString &content)
 {
+    Q_UNUSED(content);
     QString typeLabel = (type == "weekly") ? "Weekly" : "Daily";
     showNotification(
         QString("%1 Report Ready").arg(typeLabel),

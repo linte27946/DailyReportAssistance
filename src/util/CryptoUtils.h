@@ -15,7 +15,6 @@
 class CryptoUtils {
 public:
     /// Encrypt a plaintext string. Returns base64-encoded ciphertext.
-    /// On failure, returns an empty QByteArray.
     static QByteArray encrypt(const QByteArray &plaintext)
     {
 #ifdef _WIN32
@@ -41,14 +40,12 @@ public:
         spdlog::error("CryptProtectData failed: {}", GetLastError());
         return {};
 #else
-        // Non-Windows fallback: plain base64 (not secure, but allows compilation)
-        spdlog::warn("DPAPI not available on this platform - API key stored in plaintext");
+        // Non-Windows: plain base64 (for cross-compilation only)
         return plaintext.toBase64();
 #endif
     }
 
     /// Decrypt a base64-encoded ciphertext back to plaintext.
-    /// On failure, returns an empty QByteArray.
     static QByteArray decrypt(const QByteArray &ciphertext)
     {
 #ifdef _WIN32

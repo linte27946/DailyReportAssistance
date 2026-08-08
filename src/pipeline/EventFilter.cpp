@@ -145,6 +145,7 @@ bool EventFilter::isDuplicate(const RawEvent &event)
 
 void EventFilter::recordEvent(const RawEvent &event)
 {
+    Q_UNUSED(event);
     // Periodically clean old entries from the dedup map
     if (m_dedupMap.size() > 10000) {
         QDateTime cutoff = QDateTime::currentDateTimeUtc().addSecs(-60);
