@@ -18,6 +18,12 @@ void MonitorEngine::registerMonitor(std::unique_ptr<IMonitor> monitor)
         return;
     }
 
+    if (m_running) {
+        spdlog::error("Cannot register monitor while MonitorEngine is running.");
+        emit engineError(monitor->name(), "Cannot register a monitor while monitoring is active.");
+        return;
+    }
+
     spdlog::info("Registering monitor: {}", monitor->name().toStdString());
 
     MonitorEntry entry;
@@ -36,18 +42,13 @@ void MonitorEngine::registerMonitor(std::unique_ptr<IMonitor> monitor)
             this, &MonitorEngine::engineError,
             Qt::QueuedConnection);
 
-    // Start monitor when thread starts
-    connect(entry.thread, &QThread::started,
-            entry.monitor.get(), [this, name = entry.monitor->name()]() {
-                spdlog::info("Monitor thread started: {}", name.toStdString());
-            });
-
-    // Cleanup thread when it finishes
-    connect(entry.thread, &QThread::finished,
-            entry.monitor.get(), [this, &entry]() {
-                spdlog::info("Monitor thread finished: {}",
-                             entry.monitor->name().toStdString());
-            });
+    const QString monitorName = entry.monitor->name();
+    connect(entry.thread, &QThread::started, this, [monitorName]() {
+        spdlog::info("Monitor thread started: {}", monitorName.toStdString());
+    });
+    connect(entry.thread, &QThread::finished, this, [monitorName]() {
+        spdlog::info("Monitor thread finished: {}", monitorName.toStdString());
+    });
 
     m_monitors.push_back(std::move(entry));
 }
@@ -61,33 +62,49 @@ bool MonitorEngine::startAll()
 
     if (m_monitors.empty()) {
         spdlog::warn("No monitors registered.");
-        m_running = true;
+        m_running = false;
         return true;
     }
 
     spdlog::info("Starting {} monitors...", m_monitors.size());
 
-    bool allStarted = true;
+    bool anyStarted = false;
+    QThread *targetThread = thread();
     for (auto &entry : m_monitors) {
-        if (!entry.monitor->start()) {
+        if (entry.monitor->thread() != entry.thread)
+            entry.monitor->moveToThread(entry.thread);
+        entry.thread->start();
+
+        bool started = false;
+        const bool invoked = QMetaObject::invokeMethod(
+            entry.monitor.get(),
+            [&entry, &started]() { started = entry.monitor->start(); },
+            Qt::BlockingQueuedConnection);
+
+        if (!invoked || !started) {
             spdlog::error("Failed to start monitor: {}",
                           entry.monitor->name().toStdString());
-            allStarted = false;
+            emit engineError(entry.monitor->name(), "Monitor failed to start on this platform.");
+            QMetaObject::invokeMethod(
+                entry.monitor.get(),
+                [&entry, targetThread]() {
+                    entry.monitor->moveToThread(targetThread);
+                },
+                Qt::BlockingQueuedConnection);
+            entry.thread->quit();
+            entry.thread->wait(5000);
+        } else {
+            anyStarted = true;
         }
     }
 
-    if (allStarted) {
-        // Start all monitor threads
-        for (auto &entry : m_monitors) {
-            entry.thread->start();
-        }
-
-        m_running = true;
-        spdlog::info("All monitors started successfully.");
+    m_running = anyStarted;
+    if (anyStarted) {
+        spdlog::info("Available monitors started successfully.");
         emit allMonitorsStarted();
     }
 
-    return allStarted;
+    return anyStarted;
 }
 
 void MonitorEngine::stopAll()
@@ -96,16 +113,29 @@ void MonitorEngine::stopAll()
 
     spdlog::info("Stopping all monitors...");
 
-    // Signal stop to each monitor
+    QThread *targetThread = thread();
+
+    // Stop in each monitor's own thread, then transfer ownership affinity back
+    // to the engine thread before the worker event loop is shut down.
     for (auto &entry : m_monitors) {
-        entry.monitor->stop();
+        if (!entry.thread->isRunning()) continue;
+        QMetaObject::invokeMethod(
+            entry.monitor.get(),
+            [&entry, targetThread]() {
+                entry.monitor->stop();
+                entry.monitor->moveToThread(targetThread);
+            },
+            Qt::BlockingQueuedConnection);
     }
 
     // Quit and wait for threads
     for (auto &entry : m_monitors) {
         if (entry.thread->isRunning()) {
             entry.thread->quit();
-            entry.thread->wait(5000); // 5 second timeout
+            if (!entry.thread->wait(5000)) {
+                spdlog::error("Timed out waiting for monitor thread: {}",
+                              entry.monitor->name().toStdString());
+            }
         }
     }
 

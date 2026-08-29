@@ -17,6 +17,9 @@ public:
     /// Human-readable backend name (e.g., "OpenAI", "Anthropic", "Ollama").
     virtual QString name() const = 0;
 
+    /// Configured model identifier, used in report history and diagnostics.
+    virtual QString model() const = 0;
+
     /// Configure this backend.
     virtual void configure(const LlmConfig &config) = 0;
 
@@ -26,6 +29,9 @@ public:
     /// Generate text from a prompt. Returns the generated text asynchronously.
     virtual QFuture<QString> generate(const QString &systemPrompt,
                                        const QString &userPrompt) = 0;
+
+    /// Abort an in-flight request during application shutdown.
+    virtual void cancel() = 0;
 
 signals:
     /// Emitted for each token during streaming generation.

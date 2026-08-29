@@ -36,7 +36,7 @@ public:
     {
         Timeline result;
         for (const auto &e : m_events) {
-            if (e.timestamp.date() == date)
+            if (e.timestamp.toLocalTime().date() == date)
                 result.addEvent(e);
         }
         return result;
@@ -46,10 +46,12 @@ public:
     Timeline forDateRange(const QDate &start, const QDate &end) const
     {
         Timeline result;
-        QDateTime startDt(start, QTime(0, 0, 0), Qt::UTC);
-        QDateTime endDt(end, QTime(23, 59, 59, 999), Qt::UTC);
+        QDateTime startDt(start, QTime(0, 0, 0), Qt::LocalTime);
+        QDateTime endDt(end.addDays(1), QTime(0, 0, 0), Qt::LocalTime);
+        startDt = startDt.toUTC();
+        endDt = endDt.toUTC();
         for (const auto &e : m_events) {
-            if (e.timestamp >= startDt && e.timestamp <= endDt)
+            if (e.timestamp >= startDt && e.timestamp < endDt)
                 result.addEvent(e);
         }
         return result;
@@ -74,12 +76,48 @@ public:
 
         Timeline dayTimeline = forDate(date);
 
-        for (const auto &e : dayTimeline.events()) {
-            summary.categoryDurationSecs[e.category] += e.durationSecs;
+        dayTimeline.sort();
+
+        // Focus-change events are point-in-time observations. Estimate each
+        // focused window's duration from the following focus event, capped to
+        // avoid counting long sleep/offline gaps as active work.
+        QMap<int, int> estimatedDurations;
+        int previousFocusIndex = -1;
+        for (int i = 0; i < dayTimeline.events().size(); ++i) {
+            const auto &event = dayTimeline.events()[i];
+            if (event.type != EventType::WindowFocusChanged) continue;
+            if (previousFocusIndex >= 0) {
+                const auto &previous = dayTimeline.events()[previousFocusIndex];
+                const qint64 seconds = previous.timestamp.secsTo(event.timestamp);
+                if (seconds > 0)
+                    estimatedDurations[previousFocusIndex] = static_cast<int>(qMin<qint64>(seconds, 1800));
+            }
+            previousFocusIndex = i;
+        }
+        if (previousFocusIndex >= 0) {
+            const auto &previous = dayTimeline.events()[previousFocusIndex];
+            const QDateTime periodEnd = date == QDate::currentDate()
+                ? QDateTime::currentDateTimeUtc()
+                : QDateTime(date.addDays(1), QTime(0, 0), Qt::LocalTime).toUTC();
+            const qint64 seconds = previous.timestamp.secsTo(periodEnd);
+            if (seconds > 0)
+                estimatedDurations[previousFocusIndex] = static_cast<int>(qMin<qint64>(seconds, 1800));
+        }
+
+        for (int i = 0; i < dayTimeline.events().size(); ++i) {
+            const auto &e = dayTimeline.events()[i];
+            const int durationSecs = e.durationSecs > 0
+                ? e.durationSecs
+                : estimatedDurations.value(i, 0);
+            summary.categoryDurationSecs[e.category] += durationSecs;
 
             switch (e.category) {
             case EventCategory::Coding:
-                if (e.type == EventType::FileModified) summary.fileEditCount++;
+                if (e.type == EventType::FileModified
+                    || e.type == EventType::FileCreated
+                    || e.type == EventType::FileRenamed) {
+                    summary.fileEditCount++;
+                }
                 break;
             case EventCategory::VersionControl:
                 if (e.type == EventType::GitCommit) summary.gitCommitCount++;
@@ -92,14 +130,20 @@ public:
                 }
                 break;
             case EventCategory::Idle:
-                summary.totalIdleSecs += e.durationSecs;
+                summary.totalIdleSecs += durationSecs;
                 break;
             default:
                 break;
             }
 
-            if (e.category != EventCategory::Idle)
-                summary.totalActiveSecs += e.durationSecs;
+            if (e.type == EventType::UserActive
+                && e.metadata.contains("idleDurationSecs")) {
+                const int idleDuration = e.metadata["idleDurationSecs"].toInt();
+                summary.totalIdleSecs += idleDuration;
+                summary.categoryDurationSecs[EventCategory::Idle] += idleDuration;
+            } else if (e.category != EventCategory::Idle) {
+                summary.totalActiveSecs += durationSecs;
+            }
         }
 
         // Gather top files
@@ -144,3 +188,5 @@ public:
 private:
     QList<ActivityEvent> m_events;
 };
+
+Q_DECLARE_METATYPE(Timeline)

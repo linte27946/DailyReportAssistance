@@ -58,6 +58,10 @@ private slots:
 
         Timeline timeline = repo.queryTimeline(QDate::currentDate());
         QVERIFY(timeline.count() > 0);
+        const ActivityEvent stored = timeline.events().last();
+        QCOMPARE(stored.type, EventType::FileModified);
+        QCOMPARE(stored.category, EventCategory::Coding);
+        QCOMPARE(stored.filePath, QString("/test/file.cpp"));
     }
 
     void testEventPruning()

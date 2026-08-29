@@ -21,6 +21,11 @@ void OllamaBackend::configure(const LlmConfig &config)
                  m_config.endpoint.toStdString(), m_config.model.toStdString());
 }
 
+void OllamaBackend::cancel()
+{
+    if (m_activeReply) m_activeReply->abort();
+}
+
 QFuture<bool> OllamaBackend::isAvailable()
 {
     QFutureInterface<bool> fi;
@@ -95,7 +100,7 @@ QFuture<QString> OllamaBackend::generate(const QString &systemPrompt,
             QString error = QString("Ollama API error: %1").arg(reply->errorString());
             spdlog::error(error.toStdString());
             emit generationError(error);
-            fi->reportResult(QString());
+            fi->reportResult("Error: " + error);
         } else if (!accumulatedText->isEmpty()) {
             emit generationComplete(*accumulatedText);
             fi->reportResult(*accumulatedText);
@@ -109,7 +114,7 @@ QFuture<QString> OllamaBackend::generate(const QString &systemPrompt,
                 fi->reportResult(text);
             } else {
                 emit generationError("Ollama returned empty response.");
-                fi->reportResult(QString());
+                fi->reportResult("Error: Ollama returned an empty response.");
             }
         }
 

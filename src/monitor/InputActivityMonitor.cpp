@@ -1,4 +1,6 @@
 #include "InputActivityMonitor.h"
+#include <QProcess>
+#include <QStandardPaths>
 #include <spdlog/spdlog.h>
 
 #ifdef _WIN32
@@ -21,6 +23,14 @@ InputActivityMonitor::~InputActivityMonitor()
 bool InputActivityMonitor::start()
 {
     spdlog::info("InputActivityMonitor starting (AFK threshold: {}s)...", m_afkThresholdSecs);
+#ifndef _WIN32
+    if (QStandardPaths::findExecutable("xprintidle").isEmpty()) {
+        const QString error = "xprintidle is not installed; idle tracking is unavailable.";
+        spdlog::warn("InputActivityMonitor: {}", error.toStdString());
+        emit monitorError(name(), error);
+        return false;
+    }
+#endif
     m_isIdle = false;
     m_checkTimer->start();
     setRunning(true);
@@ -97,6 +107,17 @@ int InputActivityMonitor::getIdleTimeSecs()
     }
     return 0;
 #else
-    return 0;
+    const QString program = QStandardPaths::findExecutable("xprintidle");
+    if (program.isEmpty()) return -1;
+    QProcess process;
+    process.start(program);
+    if (!process.waitForFinished(1000)
+        || process.exitStatus() != QProcess::NormalExit
+        || process.exitCode() != 0) {
+        return -1;
+    }
+    bool ok = false;
+    const qint64 idleMs = process.readAllStandardOutput().trimmed().toLongLong(&ok);
+    return ok ? static_cast<int>(idleMs / 1000) : -1;
 #endif
 }

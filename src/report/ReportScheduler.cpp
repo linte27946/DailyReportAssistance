@@ -14,6 +14,11 @@ ReportScheduler::ReportScheduler(ReportGenerator *generator, QObject *parent)
 
 void ReportScheduler::setEnabled(bool enabled)
 {
+    if (enabled == m_enabled) {
+        if (enabled && !m_scheduleTimer->isActive())
+            m_scheduleTimer->start();
+        return;
+    }
     m_enabled = enabled;
     if (enabled) {
         spdlog::info("ReportScheduler: Enabled. Daily at {}, Weekly on day {} at {}",
@@ -63,26 +68,27 @@ void ReportScheduler::checkSchedule()
 
     // Check daily report schedule
     if (currentTime >= m_dailyTime && m_lastDailyDate != today) {
-        // Check if we're within the first check window after the scheduled time
-        int minutesAfter = m_dailyTime.secsTo(currentTime) / 60;
-        if (minutesAfter >= 0 && minutesAfter < 5) {
+        if (!m_generator->reportExists(today, "daily")) {
             spdlog::info("ReportScheduler: Triggering daily report for {}", today.toString(Qt::ISODate).toStdString());
             m_lastDailyDate = today;
             generateNow("daily");
+        } else {
+            m_lastDailyDate = today;
         }
     }
 
     // Check weekly report schedule
     if (today.dayOfWeek() == m_weeklyDay && currentTime >= m_weeklyTime
         && m_lastWeeklyDate != today) {
-        int minutesAfter = m_weeklyTime.secsTo(currentTime) / 60;
-        if (minutesAfter >= 0 && minutesAfter < 5) {
+        if (!m_generator->reportExists(today, "weekly")) {
             // Find Monday of this week
             QDate weekMonday = today.addDays(-(today.dayOfWeek() - 1));
             spdlog::info("ReportScheduler: Triggering weekly report for week of {}",
                          weekMonday.toString(Qt::ISODate).toStdString());
             m_lastWeeklyDate = today;
             generateNow("weekly");
+        } else {
+            m_lastWeeklyDate = today;
         }
     }
 }

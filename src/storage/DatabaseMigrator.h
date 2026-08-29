@@ -47,6 +47,11 @@ public:
         QStringList filters;
         filters << "*.sql";
         QFileInfoList files = dir.entryInfoList(filters, QDir::Files, QDir::Name);
+        if (files.isEmpty() && currentVersion == 0) {
+            spdlog::error("No database migrations found in: {}",
+                          m_migrationsDir.toStdString());
+            return false;
+        }
 
         for (const auto &fileInfo : files) {
             // Parse version number from filename (e.g., "001_initial_schema.sql" -> 1)
@@ -72,6 +77,12 @@ public:
             QString sql = QString::fromUtf8(file.readAll());
             file.close();
 
+            if (!db.transaction()) {
+                spdlog::error("Could not start transaction for migration {}: {}",
+                              version, db.lastError().text().toStdString());
+                return false;
+            }
+
             // Execute SQL statements (split by semicolons on their own)
             QStringList statements = sql.split(';', Qt::SkipEmptyParts);
             for (const auto &stmt : statements) {
@@ -82,6 +93,7 @@ public:
                     spdlog::error("Migration {} failed: {}",
                                   version, query.lastError().text().toStdString());
                     spdlog::error("SQL: {}", trimmed.toStdString());
+                    db.rollback();
                     return false;
                 }
             }
@@ -93,6 +105,14 @@ public:
             if (!query.exec()) {
                 spdlog::error("Failed to record migration {}: {}",
                               version, query.lastError().text().toStdString());
+                db.rollback();
+                return false;
+            }
+
+            if (!db.commit()) {
+                spdlog::error("Could not commit migration {}: {}",
+                              version, db.lastError().text().toStdString());
+                db.rollback();
                 return false;
             }
 

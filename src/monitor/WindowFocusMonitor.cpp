@@ -1,4 +1,7 @@
 #include "WindowFocusMonitor.h"
+#include <QFileInfo>
+#include <QProcess>
+#include <QStandardPaths>
 #include <spdlog/spdlog.h>
 
 #ifdef _WIN32
@@ -45,6 +48,12 @@ void CALLBACK WindowFocusMonitor::winEventHookProc(HWINEVENTHOOK /*hHook*/,
 WindowFocusMonitor::WindowFocusMonitor(QObject *parent)
     : IMonitor(parent)
 {
+#ifndef _WIN32
+    m_pollTimer = new QTimer(this);
+    m_pollTimer->setInterval(2000);
+    connect(m_pollTimer, &QTimer::timeout,
+            this, &WindowFocusMonitor::pollForegroundWindow);
+#endif
 }
 
 WindowFocusMonitor::~WindowFocusMonitor()
@@ -91,7 +100,15 @@ bool WindowFocusMonitor::start()
     spdlog::info("WindowFocusMonitor started.");
     return true;
 #else
+    if (QStandardPaths::findExecutable("xdotool").isEmpty()) {
+        const QString error = "xdotool is not installed; window-focus tracking is unavailable.";
+        spdlog::warn("WindowFocusMonitor: {}", error.toStdString());
+        emit monitorError(name(), error);
+        return false;
+    }
     setRunning(true);
+    pollForegroundWindow();
+    m_pollTimer->start();
     return true;
 #endif
 }
@@ -104,6 +121,10 @@ void WindowFocusMonitor::stop()
         m_hook = nullptr;
     }
     s_instance = nullptr;
+#endif
+#ifndef _WIN32
+    m_pollTimer->stop();
+    m_lastWindowKey.clear();
 #endif
     setRunning(false);
     spdlog::info("WindowFocusMonitor stopped.");
@@ -121,8 +142,62 @@ WindowFocusMonitor::WindowInfo WindowFocusMonitor::getForegroundWindowInfo()
     info.processName = getWindowProcessName(info.hwnd, &pid);
     info.processId = pid;
     info.processPath = getWindowProcessPath(info.hwnd);
+#else
+    const QString xdotool = QStandardPaths::findExecutable("xdotool");
+    if (xdotool.isEmpty()) return info;
+
+    auto run = [&xdotool](const QStringList &arguments) {
+        QProcess process;
+        process.start(xdotool, arguments);
+        if (!process.waitForFinished(1000)
+            || process.exitStatus() != QProcess::NormalExit
+            || process.exitCode() != 0) {
+            return QString();
+        }
+        return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+    };
+
+    bool idOk = false;
+    const quintptr windowId = run({"getactivewindow"}).toULongLong(&idOk);
+    if (!idOk) return info;
+    info.hwnd = reinterpret_cast<void *>(windowId);
+    info.title = run({"getwindowname", QString::number(windowId)});
+    bool pidOk = false;
+    info.processId = run({"getwindowpid", QString::number(windowId)}).toLongLong(&pidOk);
+    if (pidOk) {
+        info.processPath = QFileInfo(
+            QString("/proc/%1/exe").arg(info.processId)).symLinkTarget();
+        info.processName = QFileInfo(info.processPath).fileName().toLower();
+    }
 #endif
     return info;
+}
+
+void WindowFocusMonitor::pollForegroundWindow()
+{
+#ifndef _WIN32
+    if (!isRunning()) return;
+    const WindowInfo info = getForegroundWindowInfo();
+    if (info.title.isEmpty() && info.processName.isEmpty()) return;
+
+    const QString key = QString("%1:%2:%3")
+                            .arg(info.processId)
+                            .arg(info.processName, info.title);
+    if (key == m_lastWindowKey) return;
+    m_lastWindowKey = key;
+
+    RawEvent event;
+    event.timestamp = QDateTime::currentDateTimeUtc();
+    event.type = EventType::WindowFocusChanged;
+    event.source = "WindowFocusMonitor";
+    event.processName = info.processName;
+    event.windowTitle = info.title;
+    event.description = QString("Window focus: [%1] %2")
+                            .arg(info.processName, info.title);
+    event.metadata["processId"] = info.processId;
+    event.metadata["processPath"] = info.processPath;
+    emit rawEventCaptured(event);
+#endif
 }
 
 #ifdef _WIN32

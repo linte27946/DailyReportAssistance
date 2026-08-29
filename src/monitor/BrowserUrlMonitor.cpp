@@ -14,7 +14,8 @@ const QSet<QString> &BrowserUrlMonitor::browserProcesses()
 {
     static const QSet<QString> procs = {
         "chrome.exe", "msedge.exe", "firefox.exe",
-        "brave.exe", "opera.exe", "iexplore.exe"
+        "brave.exe", "opera.exe", "iexplore.exe",
+        "chrome", "google-chrome", "chromium", "firefox", "brave"
     };
     return procs;
 }
@@ -55,6 +56,11 @@ bool BrowserUrlMonitor::start()
 #ifdef _WIN32
     s_instance_for_automation = this;
     initAutomation();
+#else
+    const QString error = "Browser URL capture is not available on Linux without a browser integration.";
+    spdlog::warn("BrowserUrlMonitor: {}", error.toStdString());
+    emit monitorError(name(), error);
+    return false;
 #endif
     m_pollTimer->start();
     setRunning(true);

@@ -103,3 +103,46 @@ inline QString eventTypeToString(EventType type)
     default:                            return "Unknown";
     }
 }
+
+/// Parse a persisted EventCategory value. Unknown strings remain Unknown so a
+/// database row cannot silently turn into an unrelated activity category.
+inline EventCategory eventCategoryFromString(const QString &value)
+{
+    if (value == "Coding") return EventCategory::Coding;
+    if (value == "Code Review") return EventCategory::CodeReview;
+    if (value == "Debugging") return EventCategory::Debugging;
+    if (value == "Building") return EventCategory::Building;
+    if (value == "Testing") return EventCategory::Testing;
+    if (value == "Documentation") return EventCategory::Documentation;
+    if (value == "Communication") return EventCategory::Communication;
+    if (value == "Version Control") return EventCategory::VersionControl;
+    if (value == "Browsing") return EventCategory::Browsing;
+    if (value == "Idle") return EventCategory::Idle;
+    if (value == "Other") return EventCategory::Other;
+    return EventCategory::Unknown;
+}
+
+/// Parse a persisted EventType value.
+inline EventType eventTypeFromString(const QString &value)
+{
+    if (value == "FileCreated") return EventType::FileCreated;
+    if (value == "FileModified") return EventType::FileModified;
+    if (value == "FileDeleted") return EventType::FileDeleted;
+    if (value == "FileRenamed") return EventType::FileRenamed;
+    if (value == "ProcessStarted") return EventType::ProcessStarted;
+    if (value == "ProcessEnded") return EventType::ProcessEnded;
+    if (value == "WindowFocusChanged") return EventType::WindowFocusChanged;
+    if (value == "UserActive") return EventType::UserActive;
+    if (value == "UserIdle") return EventType::UserIdle;
+    if (value == "UrlVisited") return EventType::UrlVisited;
+    if (value == "GitCommit") return EventType::GitCommit;
+    if (value == "GitPush") return EventType::GitPush;
+    if (value == "GitPull") return EventType::GitPull;
+    if (value == "GitBranchSwitch") return EventType::GitBranchSwitch;
+    if (value == "GitMerge") return EventType::GitMerge;
+    if (value == "BuildStarted") return EventType::BuildStarted;
+    if (value == "BuildCompleted") return EventType::BuildCompleted;
+    if (value == "SessionStarted") return EventType::SessionStarted;
+    if (value == "SessionEnded") return EventType::SessionEnded;
+    return EventType::Unknown;
+}

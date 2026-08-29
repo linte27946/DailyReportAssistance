@@ -2,8 +2,10 @@
 #include "TemplateEngine.h"
 #include "storage/EventRepository.h"
 #include "storage/ReportRepository.h"
+#include "storage/Database.h"
 #include <QFutureInterface>
 #include <QTimer>
+#include <QThread>
 #include <QtConcurrent/QtConcurrent>
 #include <spdlog/spdlog.h>
 
@@ -20,34 +22,58 @@ ReportGenerator::ReportGenerator(TemplateEngine *templateEngine,
 {
 }
 
+ReportGenerator::~ReportGenerator()
+{
+    m_futureSynchronizer.waitForFinished();
+}
+
+void ReportGenerator::setReportLanguage(const QString &language)
+{
+    QMutexLocker locker(&m_configMutex);
+    m_reportLanguage = language;
+}
+
+bool ReportGenerator::reportExists(const QDate &date, const QString &type) const
+{
+    const QDate effectiveDate = type == "weekly"
+        ? date.addDays(-(date.dayOfWeek() - 1)) : date;
+    return m_reportRepo->reportExists(effectiveDate, type);
+}
+
 QFuture<ReportResult> ReportGenerator::generateDailyReport(const QDate &date)
 {
     auto *fi = new QFutureInterface<ReportResult>();
     fi->reportStarted();
+    const QFuture<ReportResult> future = fi->future();
+    m_futureSynchronizer.addFuture(future);
 
     (void)QtConcurrent::run([this, fi, date]() {
         ReportResult result = doGenerate(date, "daily");
+        Database::instance().closeConnection();
         fi->reportResult(result);
         fi->reportFinished();
         delete fi;
     });
 
-    return fi->future();
+    return future;
 }
 
 QFuture<ReportResult> ReportGenerator::generateWeeklyReport(const QDate &date)
 {
     auto *fi = new QFutureInterface<ReportResult>();
     fi->reportStarted();
+    const QFuture<ReportResult> future = fi->future();
+    m_futureSynchronizer.addFuture(future);
 
     (void)QtConcurrent::run([this, fi, date]() {
         ReportResult result = doGenerate(date, "weekly");
+        Database::instance().closeConnection();
         fi->reportResult(result);
         fi->reportFinished();
         delete fi;
     });
 
-    return fi->future();
+    return future;
 }
 
 QFuture<ReportResult> ReportGenerator::regenerateReport(const QDate &date, const QString &type)
@@ -96,7 +122,16 @@ ReportResult ReportGenerator::doGenerate(const QDate &date, const QString &type)
 
         // Render the template to get the user prompt
         QString templateName = type == "weekly" ? "weekly_report" : "daily_report";
-        QString userPrompt = m_templateEngine->render(templateName, context);
+        QString userPrompt;
+        auto renderTemplate = [&]() {
+            userPrompt = m_templateEngine->render(templateName, context);
+        };
+        if (QThread::currentThread() == m_templateEngine->thread()) {
+            renderTemplate();
+        } else {
+            QMetaObject::invokeMethod(m_templateEngine, renderTemplate,
+                                      Qt::BlockingQueuedConnection);
+        }
 
         if (userPrompt.isEmpty()) {
             result.success = false;
@@ -106,15 +141,37 @@ ReportResult ReportGenerator::doGenerate(const QDate &date, const QString &type)
         }
 
         // System prompt
+        QString reportLanguage;
+        {
+            QMutexLocker locker(&m_configMutex);
+            reportLanguage = m_reportLanguage;
+        }
+        const QString languageName = reportLanguage == "en"
+            ? "English" : reportLanguage == "ja-JP" ? "Japanese" : "Simplified Chinese";
         QString systemPrompt = QString(
             "You are a professional assistant that helps software developers "
             "write clear, concise, and informative work reports. "
             "Respond with well-formatted Markdown. "
-            "Use the data provided to create an accurate report in the requested language."
-        );
+            "Use the data provided to create an accurate report. "
+            "Write the final report in %1."
+        ).arg(languageName);
 
         // Call LLM (blocking wait on the async result)
-        QFuture<QString> llmFuture = m_llmClient->generateReport(systemPrompt, userPrompt);
+        QFuture<QString> llmFuture;
+        QString requestBackend;
+        QString requestModel;
+        auto startRequest = [&]() {
+            requestBackend = m_llmClient->activeBackend();
+            ILlmBackend *backend = m_llmClient->activeBackendPtr();
+            requestModel = backend ? backend->model() : QString();
+            llmFuture = m_llmClient->generateReport(systemPrompt, userPrompt);
+        };
+        if (QThread::currentThread() == m_llmClient->thread()) {
+            startRequest();
+        } else {
+            QMetaObject::invokeMethod(m_llmClient, startRequest,
+                                      Qt::BlockingQueuedConnection);
+        }
 
         // Wait for LLM response with timeout
         QEventLoop loop;
@@ -147,18 +204,24 @@ ReportResult ReportGenerator::doGenerate(const QDate &date, const QString &type)
         result.contentMd = llmOutput;
         result.success = true;
         result.generationTimeSecs = timer.elapsed() / 1000.0;
-        result.llmBackend = m_llmClient->activeBackend();
+        result.llmBackend = requestBackend;
 
         // Save to database
         QString title = type == "daily"
             ? QString("Daily Report - %1").arg(date.toString("yyyy-MM-dd"))
             : QString("Weekly Report - %1").arg(result.reportDate.toString("yyyy-MM-dd"));
 
-        ILlmBackend *backend = m_llmClient->activeBackendPtr();
-        QString model = backend ? "unknown" : "unknown";
+        result.llmModel = requestModel;
 
-        m_reportRepo->saveReport(type, result.reportDate, title, result.contentMd,
-                                  result.llmBackend, model, result.generationTimeSecs, 0);
+        const int64_t reportId = m_reportRepo->saveReport(
+            type, result.reportDate, title, result.contentMd,
+            result.llmBackend, result.llmModel, result.generationTimeSecs, 0);
+        if (reportId < 0) {
+            result.success = false;
+            result.errorMessage = "The report was generated but could not be saved.";
+            emit generationFailed(result.errorMessage);
+            return result;
+        }
 
         spdlog::info("ReportGenerator: {} report generated in {:.1f}s",
                      type.toStdString(), result.generationTimeSecs);

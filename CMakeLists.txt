@@ -24,12 +24,12 @@ elseif(MINGW)
     add_definitions(-DNOMINMAX -DUNICODE -D_UNICODE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
 else()
-    # Native Unix build (for development/testing only — monitors will be stubs)
+    # Native Unix/Linux build
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic")
 endif()
 
 # ── Dependencies ────────────────────────────────────
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Sql)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Sql Concurrent)
 find_package(spdlog REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
@@ -66,7 +66,7 @@ target_link_libraries(DailyReport PRIVATE
     dailyreport_storage
     dailyreport_core
     dailyreport_util
-    Qt6::Core Qt6::Widgets Qt6::Network Qt6::Sql
+    Qt6::Core Qt6::Widgets Qt6::Network Qt6::Sql Qt6::Concurrent
     spdlog::spdlog
     nlohmann_json::nlohmann_json
 )
@@ -90,6 +90,9 @@ endif()
 
 # ── Install ─────────────────────────────────────────
 install(TARGETS DailyReport RUNTIME DESTINATION bin)
+install(DIRECTORY src/storage/migrations/
+        DESTINATION share/dailyreport/migrations
+        FILES_MATCHING PATTERN "*.sql")
 
 # ── Tests ───────────────────────────────────────────
 option(BUILD_TESTS "Build unit tests" ON)

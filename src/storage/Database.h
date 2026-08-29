@@ -91,6 +91,10 @@ public:
                           db.lastError().text().toStdString());
         }
 
+        QSqlQuery query(db);
+        query.exec("PRAGMA foreign_keys=ON");
+        query.exec("PRAGMA busy_timeout=5000");
+
         return db;
     }
 
@@ -99,7 +103,20 @@ public:
     {
         QString connName = threadConnectionName();
         if (QSqlDatabase::contains(connName)) {
+            {
+                QSqlDatabase db = QSqlDatabase::database(connName, false);
+                db.close();
+            }
             QSqlDatabase::removeDatabase(connName);
+        }
+        const bool onApplicationThread = QCoreApplication::instance()
+            && QThread::currentThread() == QCoreApplication::instance()->thread();
+        if (onApplicationThread && QSqlDatabase::contains(mainConnectionName())) {
+            {
+                QSqlDatabase db = QSqlDatabase::database(mainConnectionName(), false);
+                db.close();
+            }
+            QSqlDatabase::removeDatabase(mainConnectionName());
         }
     }
 
@@ -135,6 +152,7 @@ private:
             exeDir + "/../src/storage/migrations",
             exeDir + "/../../src/storage/migrations",
             exeDir + "/../../../src/storage/migrations",
+            exeDir + "/../share/dailyreport/migrations",
         };
         for (const auto &c : candidates) {
             if (QDir(c).exists()) return c;

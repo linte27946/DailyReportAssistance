@@ -5,13 +5,15 @@
 #include <QPair>
 #include <QTimer>
 #include <QMutex>
+#include <QHash>
 
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
-/// Watches specified directories for file changes using ReadDirectoryChangesW.
-/// Runs on a dedicated thread with IOCP for scalable I/O.
+/// Watches configured project directories for source-file changes.
+/// A portable snapshot poller is used so the same behavior works on Linux,
+/// Windows and macOS without platform-specific watcher limits.
 class FileSystemMonitor : public IMonitor {
     Q_OBJECT
 
@@ -37,33 +39,36 @@ public:
     /// Set which directories or patterns to exclude.
     void setExcludedPaths(const QSet<QString> &paths);
 
-private:
-    void watchLoop();
+    void setPollInterval(int milliseconds);
 
-#ifdef _WIN32
-    struct WatchEntry {
-        QString path;
-        HANDLE dirHandle = INVALID_HANDLE_VALUE;
-        OVERLAPPED overlapped;
-        BYTE buffer[65536];
+private:
+    struct FileState {
+        QDateTime lastModified;
+        qint64 size = 0;
+
+        bool operator==(const FileState &other) const
+        {
+            return lastModified == other.lastModified && size == other.size;
+        }
     };
 
-    bool addDirectoryWatch(const QString &path, bool recursive);
-    void processChanges(WatchEntry &entry, DWORD bytesTransferred);
+    void pollFiles();
+    void scanDirectory(const QString &path, QHash<QString, FileState> &snapshot) const;
+    void emitFileEvent(EventType type, const QString &filePath, const FileState *state = nullptr);
     bool isTrackedFile(const QString &filePath) const;
     bool isExcludedPath(const QString &filePath) const;
-    static QString actionToString(DWORD action);
-#endif
 
     QList<QString> m_watchPaths;
     QSet<QString> m_trackedExtensions;
     QSet<QString> m_excludedPaths;
     QSet<QString> m_excludedPrefixes;
+    QHash<QString, FileState> m_snapshot;
+    QTimer *m_pollTimer = nullptr;
+    int m_pollIntervalMs = 2000;
 
     // Deduplication: avoid duplicate events for the same file within a short window
     QMap<QString, QDateTime> m_recentEvents;
     QMutex m_recentMutex;
     static constexpr int kDedupWindowMs = 2000;
 
-    volatile bool m_stopRequested = false;
 };

@@ -5,6 +5,8 @@
 #include <QStandardPaths>
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
+#include <QTextStream>
 #include <spdlog/spdlog.h>
 
 #ifdef _WIN32
@@ -17,6 +19,7 @@ namespace WinUtils {
 /// Enable or disable auto-start with Windows via the registry Run key.
 inline bool setAutoStart(bool enable, const QString &appName, const QString &appPath)
 {
+#ifdef _WIN32
     QSettings reg(
         "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
         QSettings::NativeFormat);
@@ -31,15 +34,47 @@ inline bool setAutoStart(bool enable, const QString &appName, const QString &app
 
     reg.sync();
     return reg.status() == QSettings::NoError;
+#else
+    const QString autostartDir = QStandardPaths::writableLocation(
+        QStandardPaths::ConfigLocation) + "/autostart";
+    const QString desktopPath = autostartDir + "/dailyreport.desktop";
+    if (!enable) {
+        return !QFile::exists(desktopPath) || QFile::remove(desktopPath);
+    }
+
+    if (!QDir().mkpath(autostartDir)) return false;
+    QFile file(desktopPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
+        return false;
+    QTextStream stream(&file);
+    QString escapedPath = appPath;
+    escapedPath.replace("\\", "\\\\").replace("\"", "\\\"");
+    stream << "[Desktop Entry]\n"
+           << "Type=Application\n"
+           << "Name=" << appName << "\n"
+           << "Exec=\"" << escapedPath << "\"\n"
+           << "Terminal=false\n"
+           << "X-GNOME-Autostart-enabled=true\n";
+    file.close();
+    QFile::setPermissions(desktopPath,
+                          QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    return file.error() == QFileDevice::NoError;
+#endif
 }
 
 /// Check if auto-start is currently enabled.
 inline bool isAutoStartEnabled(const QString &appName)
 {
+#ifdef _WIN32
     QSettings reg(
         "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
         QSettings::NativeFormat);
     return reg.contains(appName);
+#else
+    Q_UNUSED(appName);
+    return QFile::exists(QStandardPaths::writableLocation(
+        QStandardPaths::ConfigLocation) + "/autostart/dailyreport.desktop");
+#endif
 }
 
 /// Get the current executable path.

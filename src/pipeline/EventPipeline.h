@@ -33,6 +33,9 @@ public:
     /// Get today's activity summary.
     ActivitySummary todaySummary() const;
 
+    /// Associate subsequently processed events with the current app session.
+    void setSessionId(const QString &sessionId);
+
     /// Load classification rules from JSON.
     void loadClassificationRules(const QByteArray &json);
 
@@ -45,6 +48,10 @@ signals:
 
     /// Emitted with today's summary (updated periodically).
     void summaryUpdated(const ActivitySummary &summary);
+
+    /// Emitted after filtering/classification so the application can persist
+    /// exactly the events that appear in the timeline.
+    void eventsProcessed(const QList<ActivityEvent> &events);
 
     /// Emitted when the pipeline encounters an error.
     void pipelineError(const QString &error);
@@ -62,5 +69,5 @@ private:
     ActivityClassifier *m_classifier = nullptr;
     TimelineAssembler *m_assembler = nullptr;
     PipelineWorker *m_worker = nullptr;
-    QThread *m_workerThread = nullptr;
+    bool m_running = false;
 };

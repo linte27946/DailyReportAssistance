@@ -93,7 +93,8 @@ void TimelineAssembler::pruneBefore(const QDate &date)
 {
     QMutexLocker lock(&m_mutex);
     Timeline pruned;
-    QDateTime cutoff(date, QTime(0, 0), Qt::UTC);
+    QDateTime cutoff(date, QTime(0, 0), Qt::LocalTime);
+    cutoff = cutoff.toUTC();
     for (const auto &e : m_timeline.events()) {
         if (e.timestamp >= cutoff)
             pruned.addEvent(e);

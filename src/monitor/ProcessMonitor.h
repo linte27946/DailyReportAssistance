@@ -55,6 +55,8 @@ private:
     QSet<QString> m_trackedProcesses;
     QSet<PidType> m_knownProcessIds;  // Track PIDs we've already seen
     QMap<PidType, QDateTime> m_processStartTimes;
+    QMap<PidType, QString> m_processNames;
+    QMap<PidType, QString> m_processPaths;
 
     // Default set of developer-relevant processes
     static QSet<QString> defaultTrackedProcesses();

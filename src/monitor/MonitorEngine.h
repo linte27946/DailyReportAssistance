@@ -20,13 +20,15 @@ public:
     void registerMonitor(std::unique_ptr<IMonitor> monitor);
 
     /// Start all registered monitors.
-    /// Returns true if all monitors started successfully.
+    /// Returns true when at least one monitor started (or none are registered).
+    /// A platform-specific monitor may be unavailable without preventing the
+    /// remaining monitors from running.
     bool startAll();
 
     /// Stop all monitors gracefully.
     void stopAll();
 
-    /// Check if all monitors are running.
+    /// Check if at least one monitor is running.
     bool isRunning() const;
 
     /// Get the count of registered monitors.

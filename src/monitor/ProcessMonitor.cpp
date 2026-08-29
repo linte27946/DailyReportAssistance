@@ -1,5 +1,8 @@
 #include "ProcessMonitor.h"
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <spdlog/spdlog.h>
 
 #ifdef _WIN32
@@ -56,6 +59,17 @@ QSet<QString> ProcessMonitor::defaultTrackedProcesses()
         "teams.exe",
         "slack.exe",
         "outlook.exe",
+#ifndef _WIN32
+        // Linux editors, terminals, build tools and browsers
+        "code", "code-insiders", "codium", "idea", "pycharm", "clion",
+        "vim", "nvim", "emacs", "sublime_text",
+        "gcc", "g++", "clang", "clang++", "rustc", "cargo", "go",
+        "javac", "java", "dotnet", "node", "tsc", "cmake", "ninja",
+        "make", "meson", "bazel", "git",
+        "bash", "zsh", "fish", "konsole", "gnome-terminal-server", "kitty",
+        "chrome", "google-chrome", "chromium", "firefox", "brave",
+        "slack", "teams-for-linux",
+#endif
     };
 }
 
@@ -96,6 +110,10 @@ bool ProcessMonitor::start()
 void ProcessMonitor::stop()
 {
     m_pollTimer->stop();
+    m_knownProcessIds.clear();
+    m_processStartTimes.clear();
+    m_processNames.clear();
+    m_processPaths.clear();
     setRunning(false);
     spdlog::info("ProcessMonitor stopped.");
 }
@@ -107,7 +125,9 @@ void ProcessMonitor::addTrackedProcess(const QString &processName)
 
 void ProcessMonitor::setTrackedProcesses(const QSet<QString> &processes)
 {
-    m_trackedProcesses = processes;
+    m_trackedProcesses.clear();
+    for (const auto &process : processes)
+        m_trackedProcesses.insert(process.toLower());
 }
 
 void ProcessMonitor::pollProcesses()
@@ -140,6 +160,8 @@ void ProcessMonitor::pollProcesses()
         if (!m_knownProcessIds.contains(pid)) {
             m_knownProcessIds.insert(pid);
             m_processStartTimes[pid] = QDateTime::currentDateTimeUtc();
+            m_processNames[pid] = exeName;
+            m_processPaths[pid] = getProcessPath(pid);
 
             RawEvent event;
             event.timestamp = QDateTime::currentDateTimeUtc();
@@ -149,7 +171,7 @@ void ProcessMonitor::pollProcesses()
             event.description = QString("Process started: %1 (PID: %2)")
                                     .arg(exeName).arg(pid);
             event.metadata["pid"] = (qint64)pid;
-            event.metadata["exePath"] = getProcessPath(pid);
+            event.metadata["exePath"] = m_processPaths.value(pid);
 
             emit rawEventCaptured(event);
         }
@@ -172,7 +194,11 @@ void ProcessMonitor::pollProcesses()
         event.timestamp = QDateTime::currentDateTimeUtc();
         event.type = EventType::ProcessEnded;
         event.source = "ProcessMonitor";
-        event.description = QString("Process ended (PID: %1)").arg(pid);
+        event.processName = m_processNames.value(pid);
+        event.description = QString("Process ended: %1 (PID: %2)")
+                                .arg(event.processName).arg(pid);
+        event.metadata["pid"] = (qint64)pid;
+        event.metadata["exePath"] = m_processPaths.value(pid);
 
         if (m_processStartTimes.contains(pid)) {
             int duration = m_processStartTimes[pid].secsTo(event.timestamp);
@@ -180,10 +206,74 @@ void ProcessMonitor::pollProcesses()
             m_processStartTimes.remove(pid);
         }
 
+        m_processNames.remove(pid);
+        m_processPaths.remove(pid);
+
         emit rawEventCaptured(event);
     }
 #else
-    Q_UNUSED(this);
+    QDir procDir("/proc");
+    const QStringList pidEntries = procDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    QSet<PidType> currentPids;
+
+    for (const auto &pidText : pidEntries) {
+        bool ok = false;
+        const PidType pid = pidText.toLongLong(&ok);
+        if (!ok) continue;
+
+        QFile commFile(QString("/proc/%1/comm").arg(pid));
+        if (!commFile.open(QIODevice::ReadOnly | QIODevice::Text)) continue;
+        const QString processName = QString::fromUtf8(commFile.readAll()).trimmed().toLower();
+        if (!m_trackedProcesses.contains(processName)) continue;
+
+        currentPids.insert(pid);
+        if (m_knownProcessIds.contains(pid)) continue;
+
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        const QString processPath = getProcessPath(pid);
+        m_knownProcessIds.insert(pid);
+        m_processStartTimes[pid] = now;
+        m_processNames[pid] = processName;
+        m_processPaths[pid] = processPath;
+
+        RawEvent event;
+        event.timestamp = now;
+        event.type = EventType::ProcessStarted;
+        event.source = "ProcessMonitor";
+        event.processName = processName;
+        event.description = QString("Process started: %1 (PID: %2)")
+                                .arg(processName).arg(pid);
+        event.metadata["pid"] = pid;
+        event.metadata["exePath"] = processPath;
+        event.metadata["commandLine"] = getProcessCommandLine(pid);
+        emit rawEventCaptured(event);
+    }
+
+    QList<PidType> terminated;
+    for (PidType pid : m_knownProcessIds) {
+        if (!currentPids.contains(pid))
+            terminated.append(pid);
+    }
+
+    for (PidType pid : terminated) {
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        RawEvent event;
+        event.timestamp = now;
+        event.type = EventType::ProcessEnded;
+        event.source = "ProcessMonitor";
+        event.processName = m_processNames.value(pid);
+        event.description = QString("Process ended: %1 (PID: %2)")
+                                .arg(event.processName).arg(pid);
+        event.metadata["pid"] = pid;
+        event.metadata["exePath"] = m_processPaths.value(pid);
+        event.metadata["durationSecs"] = m_processStartTimes.value(pid).secsTo(now);
+        emit rawEventCaptured(event);
+
+        m_knownProcessIds.remove(pid);
+        m_processStartTimes.remove(pid);
+        m_processNames.remove(pid);
+        m_processPaths.remove(pid);
+    }
 #endif
 }
 
@@ -212,14 +302,18 @@ QString ProcessMonitor::getProcessCommandLine(DWORD processId)
 
 #else
 
-QString ProcessMonitor::getProcessPath(qint64)
+QString ProcessMonitor::getProcessPath(qint64 processId)
 {
-    return {};
+    return QFileInfo(QString("/proc/%1/exe").arg(processId)).symLinkTarget();
 }
 
-QString ProcessMonitor::getProcessCommandLine(qint64)
+QString ProcessMonitor::getProcessCommandLine(qint64 processId)
 {
-    return {};
+    QFile file(QString("/proc/%1/cmdline").arg(processId));
+    if (!file.open(QIODevice::ReadOnly)) return {};
+    QByteArray commandLine = file.readAll();
+    commandLine.replace('\0', ' ');
+    return QString::fromUtf8(commandLine).trimmed();
 }
 
 #endif
@@ -285,7 +379,18 @@ QStringList ProcessMonitor::getRunningTrackedProcesses()
     }
     CloseHandle(hSnapshot);
 #else
-    Q_UNUSED(this);
+    QDir procDir("/proc");
+    const QStringList pidEntries = procDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const auto &pidText : pidEntries) {
+        bool ok = false;
+        const qint64 pid = pidText.toLongLong(&ok);
+        if (!ok) continue;
+        QFile commFile(QString("/proc/%1/comm").arg(pid));
+        if (!commFile.open(QIODevice::ReadOnly | QIODevice::Text)) continue;
+        const QString name = QString::fromUtf8(commFile.readAll()).trimmed().toLower();
+        if (m_trackedProcesses.contains(name))
+            result.append(name);
+    }
 #endif
     return result;
 }

@@ -13,4 +13,5 @@ target_link_libraries(dailyreport_report PUBLIC
     dailyreport_llm
     dailyreport_util
     Qt6::Core
+    Qt6::Concurrent
 )

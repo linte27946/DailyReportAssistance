@@ -6,6 +6,8 @@
 #include <iostream>
 #include <QString>
 #include <QStandardPaths>
+#include <QDir>
+#include <QFileInfo>
 #include <vector>
 
 /// Centralized logging setup using spdlog.
@@ -17,6 +19,7 @@ public:
             // Log directory
             QString logPath = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
                               + "/logs/dailyreport.log";
+            QDir().mkpath(QFileInfo(logPath).absolutePath());
 
             // Console sink (DEBUG level for development)
             auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();

@@ -1,5 +1,8 @@
 #include "SettingsDialog.h"
 #include "storage/SettingsRepository.h"
+#include "report/TemplateEngine.h"
+#include "util/CryptoUtils.h"
+#include "util/WinUtils.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -12,9 +15,12 @@
 #include <QMessageBox>
 #include <spdlog/spdlog.h>
 
-SettingsDialog::SettingsDialog(SettingsRepository *settings, QWidget *parent)
+SettingsDialog::SettingsDialog(SettingsRepository *settings,
+                               TemplateEngine *templateEngine,
+                               QWidget *parent)
     : QWidget(parent)
     , m_settings(settings)
+    , m_templateEngine(templateEngine)
 {
     setupUi();
     loadSettings();
@@ -32,6 +38,9 @@ void SettingsDialog::setupUi()
     auto *startupGroup = new QGroupBox("Startup", generalTab);
     auto *startupForm = new QFormLayout(startupGroup);
     m_autoStartChk = new QCheckBox("Start with Windows");
+#ifndef _WIN32
+    m_autoStartChk->setText("Start automatically after login");
+#endif
     m_startMinimizedChk = new QCheckBox("Start minimized to tray");
     m_afkThresholdSpin = new QSpinBox();
     m_afkThresholdSpin->setRange(60, 3600);
@@ -156,6 +165,11 @@ void SettingsDialog::setupUi()
     m_templateEdit = new QTextEdit();
     m_templateEdit->setFont(QFont("Consolas", 10));
     m_templateEdit->setPlaceholderText("Select a template to edit...");
+    connect(m_templateCombo, &QComboBox::currentTextChanged, this,
+            [this](const QString &name) {
+                if (m_templateEngine)
+                    m_templateEdit->setPlainText(m_templateEngine->templateContent(name));
+            });
 
     templateLayout->addWidget(new QLabel("Edit Report Template:"));
     templateLayout->addWidget(m_templateCombo);
@@ -185,6 +199,14 @@ void SettingsDialog::loadSettings()
     m_browserTrackingChk->setChecked(m_settings->getBool("browser_tracking_enabled", true));
     m_buildTrackingChk->setChecked(m_settings->getBool("build_tracking_enabled", true));
 
+    m_projectPathsList->clear();
+    const QJsonDocument pathsDoc = QJsonDocument::fromJson(
+        m_settings->getValue("monitored_paths", "[]").toUtf8());
+    for (const auto &path : pathsDoc.array()) {
+        if (!path.toString().isEmpty())
+            m_projectPathsList->addItem(path.toString());
+    }
+
     m_backendCombo->setCurrentText(m_settings->getValue("llm_backend", ""));
     QJsonObject llmCfg = m_settings->getJson("llm_config");
     if (!llmCfg.isEmpty()) {
@@ -193,17 +215,30 @@ void SettingsDialog::loadSettings()
         m_temperatureSpin->setValue(llmCfg["temperature"].toDouble(0.7));
         m_maxTokensSpin->setValue(llmCfg["maxTokens"].toInt(4096));
     }
+    const QByteArray encryptedKey = m_settings->getValue("llm_api_key_encrypted").toUtf8();
+    if (!encryptedKey.isEmpty())
+        m_apiKeyEdit->setText(QString::fromUtf8(CryptoUtils::decrypt(encryptedKey)));
 
     m_dailyTimeEdit->setTime(QTime::fromString(
         m_settings->getValue("daily_report_time", "17:30"), "HH:mm"));
     m_weeklyDaySpin->setValue(m_settings->getInt("weekly_report_day", 5));
     m_weeklyTimeEdit->setTime(QTime::fromString(
         m_settings->getValue("weekly_report_time", "17:00"), "HH:mm"));
+    const QString language = m_settings->getValue("language", "zh-CN");
+    m_languageCombo->setCurrentIndex(language == "en" ? 0 : language == "ja-JP" ? 2 : 1);
+
+    if (m_templateEngine)
+        m_templateEdit->setPlainText(
+            m_templateEngine->templateContent(m_templateCombo->currentText()));
 }
 
 void SettingsDialog::saveSettings()
 {
     m_settings->setBool("auto_start", m_autoStartChk->isChecked());
+    if (!WinUtils::setAutoStart(m_autoStartChk->isChecked(),
+                                "DailyReport", WinUtils::applicationFilePath())) {
+        spdlog::warn("Failed to update the automatic-start configuration.");
+    }
     m_settings->setBool("start_minimized", m_startMinimizedChk->isChecked());
     m_settings->setInt("afk_threshold_secs", m_afkThresholdSpin->value());
     m_settings->setInt("data_retention_days", m_dataRetentionSpin->value());
@@ -222,14 +257,15 @@ void SettingsDialog::saveSettings()
     m_settings->setJson("llm_config", llmCfg);
 
     // API key is stored encrypted separately
-    if (!m_apiKeyEdit->text().isEmpty()) {
-        // We store the key via CryptoUtils::encrypt in the actual app
-        m_settings->setValue("llm_api_key_encrypted", m_apiKeyEdit->text());
-    }
+    const QByteArray encrypted = CryptoUtils::encrypt(m_apiKeyEdit->text().toUtf8());
+    m_settings->setValue("llm_api_key_encrypted", QString::fromUtf8(encrypted));
 
     m_settings->setValue("daily_report_time", m_dailyTimeEdit->time().toString("HH:mm"));
     m_settings->setInt("weekly_report_day", m_weeklyDaySpin->value());
     m_settings->setValue("weekly_report_time", m_weeklyTimeEdit->time().toString("HH:mm"));
+    const QString language = m_languageCombo->currentIndex() == 0
+        ? "en" : m_languageCombo->currentIndex() == 2 ? "ja-JP" : "zh-CN";
+    m_settings->setValue("language", language);
 
     // Save project paths as JSON array
     QJsonArray paths;
@@ -241,6 +277,15 @@ void SettingsDialog::saveSettings()
     m_settings->setValue("monitored_paths",
                          QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
 
+    if (m_templateEngine && !m_templateEdit->toPlainText().trimmed().isEmpty()) {
+        const QString name = m_templateCombo->currentText();
+        m_templateEngine->registerTemplate(
+            name, m_templateEdit->toPlainText(),
+            m_templateEngine->templateDescription(name));
+        m_templateEngine->saveToDatabase();
+    }
+
     spdlog::info("Settings saved.");
+    emit settingsSaved();
     QMessageBox::information(this, "Settings", "Settings saved successfully.");
 }

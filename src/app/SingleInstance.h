@@ -2,6 +2,10 @@
 
 #include <QString>
 #include <QByteArray>
+#include <QLockFile>
+#include <QDir>
+#include <QStandardPaths>
+#include <memory>
 #include <spdlog/spdlog.h>
 
 #ifdef _WIN32
@@ -9,7 +13,7 @@
 #endif
 
 /// Ensures only one instance of the application runs at a time.
-/// Uses a named Windows mutex.
+/// Uses a named Windows mutex or a QLockFile on Unix-like systems.
 class SingleInstance {
 public:
     explicit SingleInstance(const QString &name)
@@ -45,9 +49,23 @@ public:
         m_locked = true;
         return true;
 #else
-        // Non-Windows stub (for cross-compilation only)
-        m_locked = true;
-        return true;
+        QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+        if (runtimeDir.isEmpty())
+            runtimeDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+        QDir().mkpath(runtimeDir);
+        m_lockFile = std::make_unique<QLockFile>(
+            runtimeDir + "/" + m_mutexName + ".lock");
+        m_lockFile->setStaleLockTime(30000);
+        m_locked = m_lockFile->tryLock(0);
+        if (!m_locked)
+            spdlog::info("Another instance is already running (lock file exists).");
+        return m_locked;
+#endif
+#ifndef _WIN32
+        if (m_lockFile) {
+            m_lockFile->unlock();
+            m_lockFile.reset();
+        }
 #endif
     }
 
@@ -85,6 +103,8 @@ private:
     QString m_mutexName;
 #ifdef _WIN32
     HANDLE m_mutexHandle = nullptr;
+#else
+    std::unique_ptr<QLockFile> m_lockFile;
 #endif
     bool m_locked = false;
 };

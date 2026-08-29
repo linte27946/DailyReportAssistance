@@ -28,6 +28,13 @@ const QSet<QString> &BuildMonitor::buildProcesses()
         "unity.exe", "UnrealBuildTool.exe",
         // Other
         "bazel.exe", "scons.exe", "meson",
+        // Linux/macOS process names
+        "msbuild", "cl", "link", "nmake",
+        "gcc", "g++", "clang", "clang++", "make", "cmake", "ninja",
+        "rustc", "cargo", "go", "dotnet", "csc", "javac", "java",
+        "mvn", "gradle", "node", "tsc", "webpack", "vite", "npm",
+        "yarn", "pnpm", "python", "python3", "pip", "pip3", "bazel",
+        "scons", "meson",
     };
     return procs;
 }
@@ -54,7 +61,6 @@ bool BuildMonitor::start()
 void BuildMonitor::stop()
 {
     // End any active builds
-#ifdef _WIN32
     QDateTime now = QDateTime::currentDateTimeUtc();
     for (auto it = m_activeBuilds.begin(); it != m_activeBuilds.end(); ++it) {
         const auto &build = it.value();
@@ -66,14 +72,13 @@ void BuildMonitor::stop()
         event.source = "BuildMonitor";
         event.processName = build.processName;
         event.description = QString("Build process ended (monitor stopping): %1 (PID: %2)")
-                                .arg(build.processName).arg(static_cast<ulong>(build.pid));
-        event.metadata["pid"] = (qint64)build.pid;
+                                .arg(build.processName).arg(build.pid);
+        event.metadata["pid"] = build.pid;
         event.metadata["durationSecs"] = durationSecs;
         event.metadata["stoppedBySystem"] = true;
         emit rawEventCaptured(event);
     }
     m_activeBuilds.clear();
-#endif
     setRunning(false);
     spdlog::info("BuildMonitor stopped.");
 }
@@ -86,10 +91,8 @@ void BuildMonitor::onProcessEvent(const RawEvent &event)
     QString procName = event.processName.toLower();
     if (!buildProcesses().contains(procName)) return;
 
-#ifdef _WIN32
-    int pidInt = event.metadata["pid"].toInt(-1);
-    if (pidInt <= 0) return;
-    DWORD pid = static_cast<DWORD>(pidInt);
+    const qint64 pid = event.metadata["pid"].toVariant().toLongLong();
+    if (pid <= 0) return;
 
     if (event.type == EventType::ProcessStarted) {
         // New build process started
@@ -113,7 +116,7 @@ void BuildMonitor::onProcessEvent(const RawEvent &event)
         buildEvent.source = "BuildMonitor";
         buildEvent.processName = procName;
         buildEvent.description = QString("Build started: %1 (PID: %2)").arg(procName).arg(static_cast<ulong>(pid));
-        buildEvent.metadata["pid"] = (qint64)pid;
+        buildEvent.metadata["pid"] = pid;
         buildEvent.metadata["workingDir"] = build.workingDir;
         buildEvent.metadata["buildCountToday"] = m_buildCountToday;
 
@@ -128,8 +131,9 @@ void BuildMonitor::onProcessEvent(const RawEvent &event)
         int durationSecs = static_cast<int>(build.startTime.secsTo(event.timestamp));
 
         // Determine build success/failure from metadata
-        int exitCode = event.metadata["exitCode"].toInt(0);
-        bool success = (exitCode == 0);
+        const bool hasExitCode = event.metadata.contains("exitCode");
+        const int exitCode = event.metadata["exitCode"].toInt();
+        const bool success = hasExitCode && exitCode == 0;
 
         RawEvent buildEvent;
         buildEvent.timestamp = event.timestamp;
@@ -137,7 +141,10 @@ void BuildMonitor::onProcessEvent(const RawEvent &event)
         buildEvent.source = "BuildMonitor";
         buildEvent.processName = build.processName;
 
-        if (success) {
+        if (!hasExitCode) {
+            buildEvent.description = QString("Build process ended: %1 (%2s)")
+                                         .arg(build.processName).arg(durationSecs);
+        } else if (success) {
             buildEvent.description = QString("Build completed successfully: %1 (%2s)")
                                          .arg(build.processName).arg(durationSecs);
         } else {
@@ -148,8 +155,10 @@ void BuildMonitor::onProcessEvent(const RawEvent &event)
 
         buildEvent.metadata["pid"] = (qint64)pid;
         buildEvent.metadata["durationSecs"] = durationSecs;
-        buildEvent.metadata["success"] = success;
-        buildEvent.metadata["exitCode"] = exitCode;
+        if (hasExitCode) {
+            buildEvent.metadata["success"] = success;
+            buildEvent.metadata["exitCode"] = exitCode;
+        }
         buildEvent.metadata["buildCountToday"] = m_buildCountToday;
         buildEvent.metadata["buildFailuresToday"] = m_buildFailuresToday;
 
@@ -160,7 +169,4 @@ void BuildMonitor::onProcessEvent(const RawEvent &event)
         m_activeBuilds.remove(pid);
         m_lastBuildEndTime = event.timestamp;
     }
-#else
-    Q_UNUSED(event);
-#endif
 }

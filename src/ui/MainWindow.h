@@ -42,6 +42,7 @@ public:
 
 signals:
     void closeToTray();
+    void settingsSaved();
 
 private:
     void setupUi();

@@ -87,11 +87,15 @@ public:
             "       application, window_title, file_path, file_extension, url, "
             "       duration_secs, metadata_json, session_id "
             "FROM activity_events "
-            "WHERE date(timestamp) BETWEEN :start AND :end "
+            "WHERE timestamp >= :start AND timestamp < :end "
             "ORDER BY timestamp ASC"
         );
-        query.bindValue(":start", start.toString(Qt::ISODate));
-        query.bindValue(":end", end.toString(Qt::ISODate));
+        const QDateTime startUtc = QDateTime(
+            start, QTime(0, 0), Qt::LocalTime).toUTC();
+        const QDateTime endUtc = QDateTime(
+            end.addDays(1), QTime(0, 0), Qt::LocalTime).toUTC();
+        query.bindValue(":start", startUtc.toString(Qt::ISODateWithMs));
+        query.bindValue(":end", endUtc.toString(Qt::ISODateWithMs));
 
         if (!query.exec()) {
             spdlog::error("Failed to query timeline: {}",
@@ -107,6 +111,8 @@ public:
             QString endTs = query.value("end_timestamp").toString();
             if (!endTs.isEmpty())
                 e.endTimestamp = QDateTime::fromString(endTs, Qt::ISODateWithMs);
+            e.type = eventTypeFromString(query.value("event_type").toString());
+            e.category = eventCategoryFromString(query.value("category").toString());
             e.description = query.value("description").toString();
             e.application = query.value("application").toString();
             e.windowTitle = query.value("window_title").toString();
@@ -137,8 +143,10 @@ public:
         auto db = Database::instance().connection();
         QSqlQuery query(db);
 
-        query.prepare("DELETE FROM activity_events WHERE date(timestamp) < :cutoff");
-        query.bindValue(":cutoff", cutoff.toString(Qt::ISODate));
+        query.prepare("DELETE FROM activity_events WHERE timestamp < :cutoff");
+        const QDateTime cutoffUtc = QDateTime(
+            cutoff, QTime(0, 0), Qt::LocalTime).toUTC();
+        query.bindValue(":cutoff", cutoffUtc.toString(Qt::ISODateWithMs));
 
         if (!query.exec()) {
             spdlog::error("Failed to prune events: {}",

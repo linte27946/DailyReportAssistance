@@ -41,6 +41,8 @@ public:
     static WindowInfo getForegroundWindowInfo();
 
 private:
+    void pollForegroundWindow();
+
 #ifdef _WIN32
     static QString getWindowTitle(HWND hwnd);
     static QString getWindowProcessName(HWND hwnd, DWORD *outPid = nullptr);
@@ -59,5 +61,8 @@ private:
 
     HWINEVENTHOOK m_hook = nullptr;
     static WindowFocusMonitor *s_instance;
+#else
+    QTimer *m_pollTimer = nullptr;
+    QString m_lastWindowKey;
 #endif
 };

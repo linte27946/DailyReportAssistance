@@ -31,10 +31,6 @@ void LlmClient::registerBackend(std::unique_ptr<ILlmBackend> backend)
 
     m_backends[name] = std::move(backend);
 
-    // Set as active if it's the first one
-    if (m_activeName.isEmpty()) {
-        m_activeName = name;
-    }
 }
 
 bool LlmClient::setActiveBackend(const QString &name)
@@ -69,6 +65,8 @@ QFuture<QString> LlmClient::generateReport(const QString &systemPrompt,
 {
     if (!m_backends.contains(m_activeName)) {
         QFutureInterface<QString> fi;
+        fi.reportStarted();
+        fi.reportResult("Error: No active LLM backend is configured.");
         fi.reportFinished();
         spdlog::error("LlmClient: No active backend.");
         return fi.future();
@@ -77,6 +75,12 @@ QFuture<QString> LlmClient::generateReport(const QString &systemPrompt,
     spdlog::info("LlmClient: Generating report with backend: {}",
                  m_activeName.toStdString());
     return m_backends[m_activeName]->generate(systemPrompt, userPrompt);
+}
+
+void LlmClient::cancelActiveGeneration()
+{
+    ILlmBackend *backend = activeBackendPtr();
+    if (backend) backend->cancel();
 }
 
 bool LlmClient::hasAvailableBackend() const

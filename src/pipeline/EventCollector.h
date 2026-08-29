@@ -15,6 +15,9 @@ class EventCollector : public QObject {
 public:
     explicit EventCollector(QObject *parent = nullptr);
 
+    void start();
+    void stop(bool flushPending = true);
+
     /// Set batch parameters.
     void setBatchInterval(int ms) { m_batchIntervalMs = ms; }
     void setBatchSize(int size) { m_batchSize = size; }
@@ -28,7 +31,7 @@ signals:
 public slots:
     void collectEvent(const RawEvent &event);
 
-private slots:
+public slots:
     void flushBatch();
 
 private:

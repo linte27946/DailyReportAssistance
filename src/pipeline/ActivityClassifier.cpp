@@ -202,10 +202,31 @@ EventCategory ActivityClassifier::classifyInternal(const RawEvent &raw)
     for (const auto &rule : m_rules) {
         // Check process name match (case-insensitive)
         if (!rule.processName.isEmpty()) {
-            if (!raw.processName.isEmpty() &&
-                !QRegularExpression(QRegularExpression::wildcardToRegularExpression(rule.processName),
-                         QRegularExpression::CaseInsensitiveOption).match(raw.processName).hasMatch())
+            if (raw.processName.isEmpty())
                 continue;
+
+            auto normalizedProcessName = [](QString name) {
+                name = name.toLower();
+                for (const QString &suffix : {QString(".exe"), QString(".cmd"), QString(".bat")}) {
+                    if (name.endsWith(suffix)) {
+                        name.chop(suffix.size());
+                        break;
+                    }
+                }
+                return name;
+            };
+
+            const QRegularExpression processRegex(
+                QRegularExpression::wildcardToRegularExpression(rule.processName),
+                QRegularExpression::CaseInsensitiveOption);
+            const QRegularExpression normalizedRegex(
+                QRegularExpression::wildcardToRegularExpression(
+                    normalizedProcessName(rule.processName)),
+                QRegularExpression::CaseInsensitiveOption);
+            if (!processRegex.match(raw.processName).hasMatch()
+                && !normalizedRegex.match(normalizedProcessName(raw.processName)).hasMatch()) {
+                continue;
+            }
         }
 
         // Check extension match
@@ -218,8 +239,13 @@ EventCategory ActivityClassifier::classifyInternal(const RawEvent &raw)
         if (!rule.urlPattern.isEmpty()) {
             if (raw.url.isEmpty())
                 continue;
-            QRegularExpression urlRegex(QRegularExpression::wildcardToRegularExpression(rule.urlPattern), QRegularExpression::CaseInsensitiveOption);
-            if (!urlRegex.match(raw.url).hasMatch() && !raw.url.contains(rule.urlPattern, Qt::CaseInsensitive))
+            QString expression = QRegularExpression::escape(rule.urlPattern);
+            expression.replace("\\*", ".*");
+            expression.replace("\\?", ".");
+            const QRegularExpression urlRegex(
+                "^" + expression + "$",
+                QRegularExpression::CaseInsensitiveOption);
+            if (!urlRegex.match(raw.url).hasMatch())
                 continue;
         }
 

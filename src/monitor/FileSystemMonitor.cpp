@@ -1,5 +1,6 @@
 #include "FileSystemMonitor.h"
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <spdlog/spdlog.h>
 
@@ -31,9 +32,14 @@ FileSystemMonitor::FileSystemMonitor(QObject *parent)
         "vendor", "bower_components",
     };
 
-    m_excludedPaths = {
-        "AppData", "Temp", "Cache", "logs",
-    };
+    // Only explicitly monitored roots are scanned, so broad OS path fragments
+    // (for example /tmp) must not be excluded here. Generated project folders
+    // are handled by m_excludedPrefixes above.
+    m_excludedPaths.clear();
+
+    m_pollTimer = new QTimer(this);
+    m_pollTimer->setInterval(m_pollIntervalMs);
+    connect(m_pollTimer, &QTimer::timeout, this, &FileSystemMonitor::pollFiles);
 }
 
 FileSystemMonitor::~FileSystemMonitor()
@@ -45,18 +51,24 @@ bool FileSystemMonitor::start()
 {
     if (m_watchPaths.isEmpty()) {
         spdlog::info("FileSystemMonitor: No watch paths configured, monitoring skipped.");
-        setRunning(true);
+        setRunning(false);
         return true;
     }
 
     spdlog::info("FileSystemMonitor starting with {} watch paths.", m_watchPaths.size());
+    m_snapshot.clear();
+    for (const auto &path : m_watchPaths)
+        scanDirectory(path, m_snapshot);
+    m_pollTimer->setInterval(m_pollIntervalMs);
+    m_pollTimer->start();
     setRunning(true);
     return true;
 }
 
 void FileSystemMonitor::stop()
 {
-    m_stopRequested = true;
+    m_pollTimer->stop();
+    m_snapshot.clear();
     setRunning(false);
     spdlog::info("FileSystemMonitor stopped.");
 }
@@ -100,7 +112,12 @@ void FileSystemMonitor::setExcludedPaths(const QSet<QString> &paths)
     m_excludedPaths = paths;
 }
 
-#ifdef _WIN32
+void FileSystemMonitor::setPollInterval(int milliseconds)
+{
+    m_pollIntervalMs = qMax(250, milliseconds);
+    if (m_pollTimer->isActive())
+        m_pollTimer->setInterval(m_pollIntervalMs);
+}
 
 bool FileSystemMonitor::isTrackedFile(const QString &filePath) const
 {
@@ -114,13 +131,10 @@ bool FileSystemMonitor::isTrackedFile(const QString &filePath) const
 
 bool FileSystemMonitor::isExcludedPath(const QString &filePath) const
 {
-    // Check excluded prefixes (directory names)
-    QString normalized = QDir::toNativeSeparators(filePath).toLower();
+    const QString normalized = QDir::fromNativeSeparators(filePath).toLower();
     for (const auto &prefix : m_excludedPrefixes) {
-        if (normalized.contains("\\" + prefix + "\\") ||
-            normalized.contains("/" + prefix + "/") ||
-            normalized.contains("\\" + prefix) ||
-            normalized.contains("/" + prefix))
+        const QString component = "/" + prefix.toLower() + "/";
+        if (normalized.contains(component) || normalized.endsWith("/" + prefix.toLower()))
             return true;
     }
 
@@ -133,16 +147,75 @@ bool FileSystemMonitor::isExcludedPath(const QString &filePath) const
     return false;
 }
 
-QString FileSystemMonitor::actionToString(DWORD action)
+void FileSystemMonitor::scanDirectory(const QString &path,
+                                      QHash<QString, FileState> &snapshot) const
 {
-    switch (action) {
-    case FILE_ACTION_ADDED:            return "added";
-    case FILE_ACTION_REMOVED:          return "removed";
-    case FILE_ACTION_MODIFIED:         return "modified";
-    case FILE_ACTION_RENAMED_OLD_NAME: return "renamed_from";
-    case FILE_ACTION_RENAMED_NEW_NAME: return "renamed_to";
-    default:                           return "unknown";
+    QDir dir(path);
+    const QFileInfoList entries = dir.entryInfoList(
+        QDir::NoDotAndDotDot | QDir::AllDirs | QDir::Files | QDir::NoSymLinks,
+        QDir::Name | QDir::DirsFirst);
+
+    for (const auto &entry : entries) {
+        const QString absolutePath = entry.absoluteFilePath();
+        if (isExcludedPath(absolutePath)) continue;
+
+        if (entry.isDir()) {
+            scanDirectory(absolutePath, snapshot);
+        } else if (entry.isFile() && isTrackedFile(absolutePath)) {
+            snapshot.insert(absolutePath,
+                            FileState{entry.lastModified().toUTC(), entry.size()});
+        }
     }
 }
 
-#endif // _WIN32
+void FileSystemMonitor::pollFiles()
+{
+    QHash<QString, FileState> current;
+    for (const auto &path : m_watchPaths)
+        scanDirectory(path, current);
+
+    for (auto it = current.cbegin(); it != current.cend(); ++it) {
+        const auto previous = m_snapshot.constFind(it.key());
+        if (previous == m_snapshot.cend()) {
+            emitFileEvent(EventType::FileCreated, it.key(), &it.value());
+        } else if (!(previous.value() == it.value())) {
+            emitFileEvent(EventType::FileModified, it.key(), &it.value());
+        }
+    }
+
+    for (auto it = m_snapshot.cbegin(); it != m_snapshot.cend(); ++it) {
+        if (!current.contains(it.key()))
+            emitFileEvent(EventType::FileDeleted, it.key());
+    }
+
+    m_snapshot.swap(current);
+}
+
+void FileSystemMonitor::emitFileEvent(EventType type,
+                                      const QString &filePath,
+                                      const FileState *state)
+{
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const QString dedupKey = eventTypeToString(type) + ":" + filePath;
+    {
+        QMutexLocker lock(&m_recentMutex);
+        const QDateTime previous = m_recentEvents.value(dedupKey);
+        if (previous.isValid() && previous.msecsTo(now) < kDedupWindowMs)
+            return;
+        m_recentEvents[dedupKey] = now;
+        if (m_recentEvents.size() > 5000)
+            m_recentEvents.clear();
+    }
+
+    RawEvent event;
+    event.timestamp = now;
+    event.type = type;
+    event.source = "FileSystemMonitor";
+    event.filePath = filePath;
+    event.description = QString("%1: %2").arg(eventTypeToString(type), filePath);
+    if (state) {
+        event.metadata["size"] = state->size;
+        event.metadata["lastModified"] = state->lastModified.toString(Qt::ISODateWithMs);
+    }
+    emit rawEventCaptured(event);
+}

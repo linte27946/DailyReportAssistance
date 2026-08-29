@@ -23,5 +23,6 @@ if(WIN32)
         oleacc
         ole32 oleaut32
         user32
+        wbemuuid
     )
 endif()

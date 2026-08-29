@@ -12,6 +12,7 @@
 #include <QToolBar>
 #include <QCloseEvent>
 #include <QApplication>
+#include <QSystemTrayIcon>
 #include <QMessageBox>
 #include <spdlog/spdlog.h>
 
@@ -33,11 +34,13 @@ MainWindow::MainWindow(TemplateEngine *templateEngine,
     // Create child widgets
     m_reportViewer = new ReportViewer(reportGenerator, reportRepo, this);
     m_historyWidget = new ReportHistoryWidget(reportRepo, this);
-    m_settingsDialog = new SettingsDialog(settingsRepo, this);
+    m_settingsDialog = new SettingsDialog(settingsRepo, templateEngine, this);
     m_timelineWidget = new TimelineWidget(eventRepo, this);
 
     connect(m_historyWidget, &ReportHistoryWidget::reportSelected,
             m_reportViewer, &ReportViewer::loadReport);
+    connect(m_settingsDialog, &SettingsDialog::settingsSaved,
+            this, &MainWindow::settingsSaved);
 
     setupUi();
     createMenuBar();
@@ -90,8 +93,12 @@ void MainWindow::showTimeline() { m_stack->setCurrentWidget(m_timelineWidget); }
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    // Minimize to tray instead of closing
-    hide();
-    event->ignore();
-    emit closeToTray();
+    if (QSystemTrayIcon::isSystemTrayAvailable()) {
+        hide();
+        event->ignore();
+        emit closeToTray();
+    } else {
+        event->accept();
+        QApplication::quit();
+    }
 }

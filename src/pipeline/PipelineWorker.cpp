@@ -27,6 +27,15 @@ void PipelineWorker::processBatch(const QList<RawEvent> &events)
 
         if (classified.isEmpty()) return;
 
+        if (!m_sessionId.isEmpty()) {
+            for (auto &event : classified) {
+                if (event.sessionId.isEmpty())
+                    event.sessionId = m_sessionId;
+            }
+        }
+
+        emit eventsProcessed(classified);
+
         // Stage 3: Assemble into timeline
         m_assembler->addEvents(classified);
 

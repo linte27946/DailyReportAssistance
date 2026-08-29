@@ -3,6 +3,7 @@
 #include "core/Timeline.h"
 #include "pipeline/EventFilter.h"
 #include "pipeline/TimelineAssembler.h"
+#include "pipeline/EventPipeline.h"
 
 class TestPipeline : public QObject {
     Q_OBJECT
@@ -82,6 +83,30 @@ private slots:
 
         // e1 and e2 coalesce into one, e3 stays separate
         QCOMPARE(coalesced.count(), 2);
+    }
+
+    void testPipelineEmitsPersistableEvents()
+    {
+        EventPipeline pipeline;
+        pipeline.setSessionId("test-session");
+        QSignalSpy processedSpy(&pipeline, &EventPipeline::eventsProcessed);
+        QVERIFY(pipeline.start());
+
+        RawEvent event;
+        event.timestamp = QDateTime::currentDateTimeUtc();
+        event.type = EventType::FileModified;
+        event.source = "test";
+        event.filePath = "/tmp/project/main.cpp";
+        event.description = "Modified main.cpp";
+        pipeline.onRawEvent(event);
+
+        QTRY_COMPARE_WITH_TIMEOUT(processedSpy.count(), 1, 2500);
+        const QList<ActivityEvent> events =
+            qvariant_cast<QList<ActivityEvent>>(processedSpy.takeFirst().at(0));
+        QCOMPARE(events.size(), 1);
+        QCOMPARE(events.first().category, EventCategory::Coding);
+        QCOMPARE(events.first().sessionId, QString("test-session"));
+        pipeline.stop();
     }
 
     void testTimelineSummary()

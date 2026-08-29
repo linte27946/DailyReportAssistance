@@ -22,6 +22,8 @@ public:
     /// Set the active backend by name.
     bool setActiveBackend(const QString &name);
 
+    void clearActiveBackend() { m_activeName.clear(); }
+
     /// Get the active backend name.
     QString activeBackend() const { return m_activeName; }
 
@@ -34,6 +36,8 @@ public:
     /// Generate a report using the active backend.
     QFuture<QString> generateReport(const QString &systemPrompt,
                                      const QString &userPrompt);
+
+    void cancelActiveGeneration();
 
     /// Check if any backend is available.
     bool hasAvailableBackend() const;

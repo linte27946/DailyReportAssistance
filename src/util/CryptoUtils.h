@@ -40,7 +40,8 @@ public:
         spdlog::error("CryptProtectData failed: {}", GetLastError());
         return {};
 #else
-        // Non-Windows: plain base64 (for cross-compilation only)
+        // Linux keyring integration is not available yet. This prevents
+        // accidental plaintext display but is not cryptographic protection.
         return plaintext.toBase64();
 #endif
     }

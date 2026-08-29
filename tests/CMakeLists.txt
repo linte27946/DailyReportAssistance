@@ -4,6 +4,7 @@ function(add_dailyreport_test name sources)
         dailyreport_core
         dailyreport_storage
         dailyreport_pipeline
+        dailyreport_monitor
         dailyreport_llm
         dailyreport_report
         dailyreport_util
@@ -23,3 +24,14 @@ add_dailyreport_test(test_event_classifier test_event_classifier.cpp)
 add_dailyreport_test(test_pipeline test_pipeline.cpp)
 add_dailyreport_test(test_database test_database.cpp)
 add_dailyreport_test(test_template_engine test_template_engine.cpp)
+add_dailyreport_test(test_file_system_monitor test_file_system_monitor.cpp)
+
+if(TARGET Qt6::QSQLiteDriverPlugin)
+    add_custom_command(TARGET test_database POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:test_database>/sqldrivers"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:Qt6::QSQLiteDriverPlugin>"
+            "$<TARGET_FILE_DIR:test_database>/sqldrivers/"
+    )
+endif()

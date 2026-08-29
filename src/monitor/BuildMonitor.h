@@ -29,16 +29,14 @@ private:
     /// Known build/compiler process names.
     static const QSet<QString> &buildProcesses();
 
-#ifdef _WIN32
     struct ActiveBuild {
-        DWORD pid = 0;
+        qint64 pid = 0;
         QString processName;
         QDateTime startTime;
         QString workingDir;
     };
 
-    QMap<DWORD, ActiveBuild> m_activeBuilds;
-#endif
+    QMap<qint64, ActiveBuild> m_activeBuilds;
 
     // Track build attempts per session
     QDateTime m_lastBuildEndTime;

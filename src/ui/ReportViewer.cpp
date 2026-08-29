@@ -112,7 +112,7 @@ void ReportViewer::onGenerationCompleted(const ReportResult &result)
     m_currentContent = result.contentMd;
     QString html = MarkdownRenderer::toHtml(result.contentMd);
     m_browser->setHtml(html);
-    m_statusLabel->setText(QString("Report generated in %.1fs using %s")
+    m_statusLabel->setText(QString("Report generated in %1s using %2")
                                .arg(result.generationTimeSecs)
                                .arg(result.llmBackend));
     spdlog::info("ReportViewer: {} report displayed.", result.reportType.toStdString());

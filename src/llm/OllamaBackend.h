@@ -12,10 +12,12 @@ public:
     explicit OllamaBackend(QObject *parent = nullptr);
 
     QString name() const override { return "Ollama"; }
+    QString model() const override { return m_config.model; }
     void configure(const LlmConfig &config) override;
     QFuture<bool> isAvailable() override;
     QFuture<QString> generate(const QString &systemPrompt,
                                const QString &userPrompt) override;
+    void cancel() override;
 
 private:
     QNetworkAccessManager *m_nam = nullptr;

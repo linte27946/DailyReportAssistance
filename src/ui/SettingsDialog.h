@@ -11,16 +11,22 @@
 #include <QTextEdit>
 
 class SettingsRepository;
+class TemplateEngine;
 
 /// Settings dialog with tabs for General, Monitoring, LLM, and Reports.
 class SettingsDialog : public QWidget {
     Q_OBJECT
 
 public:
-    explicit SettingsDialog(SettingsRepository *settings, QWidget *parent = nullptr);
+    explicit SettingsDialog(SettingsRepository *settings,
+                            TemplateEngine *templateEngine,
+                            QWidget *parent = nullptr);
 
     void loadSettings();
     void saveSettings();
+
+signals:
+    void settingsSaved();
 
 private:
     void setupUi();
@@ -55,4 +61,5 @@ private:
     QComboBox *m_languageCombo = nullptr;
 
     SettingsRepository *m_settings = nullptr;
+    TemplateEngine *m_templateEngine = nullptr;
 };

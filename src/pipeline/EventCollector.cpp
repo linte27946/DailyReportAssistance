@@ -7,7 +7,19 @@ EventCollector::EventCollector(QObject *parent)
     m_flushTimer = new QTimer(this);
     m_flushTimer->setInterval(m_batchIntervalMs);
     connect(m_flushTimer, &QTimer::timeout, this, &EventCollector::flushBatch);
+}
+
+void EventCollector::start()
+{
+    m_flushTimer->setInterval(m_batchIntervalMs);
     m_flushTimer->start();
+}
+
+void EventCollector::stop(bool flushPending)
+{
+    m_flushTimer->stop();
+    if (flushPending)
+        flushBatch();
 }
 
 void EventCollector::collectEvent(const RawEvent &event)

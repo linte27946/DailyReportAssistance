@@ -5,6 +5,7 @@
 #include <QFutureInterface>
 #include <QEventLoop>
 #include <QTimer>
+#include <memory>
 #include <spdlog/spdlog.h>
 
 OpenAiBackend::OpenAiBackend(QObject *parent)
@@ -22,6 +23,11 @@ void OpenAiBackend::configure(const LlmConfig &config)
         : config.endpoint;
     spdlog::info("OpenAI backend configured: endpoint={}, model={}",
                  m_config.endpoint.toStdString(), m_config.model.toStdString());
+}
+
+void OpenAiBackend::cancel()
+{
+    if (m_activeReply) m_activeReply->abort();
 }
 
 QFuture<bool> OpenAiBackend::isAvailable()
@@ -71,9 +77,34 @@ QFuture<QString> OpenAiBackend::generate(const QString &systemPrompt,
     QByteArray body = buildRequestBody(systemPrompt, userPrompt).toUtf8();
     QNetworkReply *reply = m_nam->post(request, body);
     m_activeReply = reply;
+    auto accumulatedText = std::make_shared<QString>();
+    auto pendingData = std::make_shared<QByteArray>();
+
+    auto consumeStream = [this, accumulatedText, pendingData](const QByteArray &chunk) {
+        pendingData->append(chunk);
+        while (true) {
+            const qsizetype newline = pendingData->indexOf('\n');
+            if (newline < 0) break;
+            const QByteArray line = pendingData->left(newline).trimmed();
+            pendingData->remove(0, newline + 1);
+            if (!line.startsWith("data: ")) continue;
+            const QByteArray data = line.mid(6).trimmed();
+            if (data == "[DONE]") continue;
+
+            const QJsonObject object = QJsonDocument::fromJson(data).object();
+            const QJsonArray choices = object["choices"].toArray();
+            if (choices.isEmpty()) continue;
+            const QString token = choices.first().toObject()["delta"].toObject()["content"].toString();
+            if (!token.isEmpty()) {
+                *accumulatedText += token;
+                emit streamingToken(token);
+            }
+        }
+    };
 
     // Handle response
-    connect(reply, &QNetworkReply::finished, [this, reply, fi]() {
+    connect(reply, &QNetworkReply::finished, [this, reply, fi, accumulatedText, pendingData, consumeStream]() {
+        consumeStream(reply->readAll());
         reply->deleteLater();
         m_activeReply = nullptr;
 
@@ -81,28 +112,18 @@ QFuture<QString> OpenAiBackend::generate(const QString &systemPrompt,
             QString error = QString("OpenAI API error: %1").arg(reply->errorString());
             spdlog::error(error.toStdString());
             emit generationError(error);
-            fi->reportResult(QString());
+            fi->reportResult("Error: " + error);
             fi->reportFinished();
             delete fi;
             return;
         }
 
-        QByteArray responseData = reply->readAll();
-        QJsonDocument doc = QJsonDocument::fromJson(responseData);
-        QJsonObject obj = doc.object();
-
-        // Parse OpenAI Chat Completions response
-        QJsonArray choices = obj["choices"].toArray();
-        if (!choices.isEmpty()) {
-            QJsonObject choice = choices.first().toObject();
-            QJsonObject message = choice["message"].toObject();
-            QString content = message["content"].toString();
-
-            emit generationComplete(content);
-            fi->reportResult(content);
+        if (!accumulatedText->isEmpty()) {
+            emit generationComplete(*accumulatedText);
+            fi->reportResult(*accumulatedText);
         } else {
             emit generationError("OpenAI returned empty response.");
-            fi->reportResult(QString());
+            fi->reportResult("Error: OpenAI returned an empty response.");
         }
 
         fi->reportFinished();
@@ -110,29 +131,8 @@ QFuture<QString> OpenAiBackend::generate(const QString &systemPrompt,
     });
 
     // Handle streaming (SSE) if supported
-    connect(reply, &QNetworkReply::readyRead, [this, reply]() {
-        // Parse SSE chunks for token-by-token streaming
-        // OpenAI uses "data: " prefixed JSON lines
-        QByteArray chunk = reply->readAll();
-        QString text = QString::fromUtf8(chunk);
-
-        for (const auto &line : text.split('\n')) {
-            if (line.startsWith("data: ")) {
-                QString data = line.mid(6).trimmed();
-                if (data == "[DONE]") continue;
-
-                QJsonDocument d = QJsonDocument::fromJson(data.toUtf8());
-                QJsonObject o = d.object();
-                QJsonArray choices = o["choices"].toArray();
-                if (!choices.isEmpty()) {
-                    QJsonObject delta = choices.first().toObject()["delta"].toObject();
-                    QString token = delta["content"].toString();
-                    if (!token.isEmpty()) {
-                        emit streamingToken(token);
-                    }
-                }
-            }
-        }
+    connect(reply, &QNetworkReply::readyRead, [reply, consumeStream]() {
+        consumeStream(reply->readAll());
     });
 
     return fi->future();

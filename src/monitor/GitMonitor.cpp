@@ -61,8 +61,9 @@ void GitMonitor::scanRepositories()
     int totalEvents = 0;
 
     for (const auto &repoPath : m_repoPaths) {
-        QDateTime since = m_lastCheckTimes.value(repoPath,
-                                                  now.addSecs(-m_pollIntervalSecs * 2));
+        const QDateTime startOfToday = QDateTime(
+            QDate::currentDate(), QTime(0, 0), Qt::LocalTime).toUTC();
+        QDateTime since = m_lastCheckTimes.value(repoPath, startOfToday);
         auto events = checkRepo(repoPath, since);
         for (const auto &e : events) {
             emit rawEventCaptured(e);
@@ -93,7 +94,16 @@ QList<RawEvent> GitMonitor::checkRepo(const QString &repoPath, const QDateTime &
     });
 
     if (!git.waitForFinished(15000)) {
+        git.kill();
+        git.waitForFinished(1000);
         spdlog::warn("GitMonitor: git log timed out for {}", repoPath.toStdString());
+        return events;
+    }
+
+    if (git.exitStatus() != QProcess::NormalExit || git.exitCode() != 0) {
+        spdlog::warn("GitMonitor: git log failed for {}: {}",
+                     repoPath.toStdString(),
+                     QString::fromUtf8(git.readAllStandardError()).trimmed().toStdString());
         return events;
     }
 
@@ -122,11 +132,15 @@ QList<RawEvent> GitMonitor::parseGitLog(const QString &output, const QString &re
 
                     // Emit one event per commit
                     RawEvent event;
-                    event.timestamp = QDateTime::fromString(currentTimestamp.trimmed(), Qt::ISODate);
-                    event.timestamp.setTimeSpec(Qt::UTC);
+                    event.timestamp = QDateTime::fromString(
+                        currentTimestamp.trimmed(), Qt::ISODate).toUTC();
                     event.type = EventType::GitCommit;
                     event.source = "GitMonitor";
+#ifdef _WIN32
                     event.processName = "git.exe";
+#else
+                    event.processName = "git";
+#endif
                     event.description = QString("Git commit: %1").arg(currentMessage.trimmed());
                     event.metadata["hash"] = currentHash;
                     event.metadata["author"] = currentAuthor;
@@ -168,11 +182,15 @@ QList<RawEvent> GitMonitor::parseGitLog(const QString &output, const QString &re
     if (!currentHash.isEmpty() && !m_knownCommits.contains(currentHash)) {
         m_knownCommits.insert(currentHash);
         RawEvent event;
-        event.timestamp = QDateTime::fromString(currentTimestamp.trimmed(), Qt::ISODate);
-        event.timestamp.setTimeSpec(Qt::UTC);
+        event.timestamp = QDateTime::fromString(
+            currentTimestamp.trimmed(), Qt::ISODate).toUTC();
         event.type = EventType::GitCommit;
         event.source = "GitMonitor";
+#ifdef _WIN32
         event.processName = "git.exe";
+#else
+        event.processName = "git";
+#endif
         event.description = QString("Git commit: %1").arg(currentMessage.trimmed());
         event.metadata["hash"] = currentHash;
         event.metadata["author"] = currentAuthor;

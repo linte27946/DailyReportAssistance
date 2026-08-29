@@ -1,7 +1,7 @@
 {
   "name": "dailyreport",
   "version": "1.0.0",
-  "description": "Windows desktop app for automatic developer activity tracking and daily/weekly report generation — cross-compiled from Linux",
+  "description": "Cross-platform desktop app for automatic developer activity tracking and AI daily/weekly report generation",
   "dependencies": [
     "qtbase",
     "spdlog",

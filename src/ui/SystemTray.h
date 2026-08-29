@@ -22,6 +22,8 @@ public:
     /// Initialize the tray icon and menu.
     bool initialize();
 
+    bool isAvailable() const { return QSystemTrayIcon::isSystemTrayAvailable(); }
+
     /// Show a notification balloon.
     void showNotification(const QString &title, const QString &message,
                           QSystemTrayIcon::MessageIcon icon = QSystemTrayIcon::Information);

@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QDataStream>
+#include <QMetaType>
 #include <cstdint>
 #include "EventType.h"
 
@@ -41,6 +42,7 @@ struct RawEvent {
     {
         RawEvent e;
         e.timestamp = QDateTime::fromString(obj["timestamp"].toString(), Qt::ISODateWithMs);
+        e.type = eventTypeFromString(obj["type"].toString());
         e.source = obj["source"].toString();
         e.description = obj["description"].toString();
         e.processName = obj["processName"].toString();
@@ -95,6 +97,8 @@ struct ActivityEvent {
         e.timestamp = QDateTime::fromString(obj["timestamp"].toString(), Qt::ISODateWithMs);
         if (obj.contains("endTimestamp"))
             e.endTimestamp = QDateTime::fromString(obj["endTimestamp"].toString(), Qt::ISODateWithMs);
+        e.type = eventTypeFromString(obj["type"].toString());
+        e.category = eventCategoryFromString(obj["category"].toString());
         e.description = obj["description"].toString();
         e.application = obj["application"].toString();
         e.windowTitle = obj["windowTitle"].toString();
@@ -156,3 +160,7 @@ struct ActivitySummary {
         return obj;
     }
 };
+
+Q_DECLARE_METATYPE(RawEvent)
+Q_DECLARE_METATYPE(ActivityEvent)
+Q_DECLARE_METATYPE(ActivitySummary)

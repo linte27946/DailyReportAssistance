@@ -130,16 +130,17 @@ bool EventFilter::isDuplicate(const RawEvent &event)
               + event.description.left(80);
     }
 
-    QDateTime now = QDateTime::currentDateTimeUtc();
+    const QDateTime eventTime = event.timestamp.isValid()
+        ? event.timestamp : QDateTime::currentDateTimeUtc();
 
     if (m_dedupMap.contains(key)) {
-        int msSince = m_dedupMap[key].msecsTo(now);
-        if (msSince < m_dedupWindowMs) {
+        const qint64 msSince = m_dedupMap[key].msecsTo(eventTime);
+        if (msSince >= 0 && msSince < m_dedupWindowMs) {
             return true;  // Duplicate within the window
         }
     }
 
-    m_dedupMap[key] = now;
+    m_dedupMap[key] = eventTime;
     return false;
 }
 
