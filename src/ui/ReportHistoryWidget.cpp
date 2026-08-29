@@ -1,4 +1,5 @@
 #include "ReportHistoryWidget.h"
+#include "UiLanguage.h"
 #include "storage/ReportRepository.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -20,13 +21,21 @@ void ReportHistoryWidget::setupUi()
     auto *layout = new QVBoxLayout(this);
 
     auto *filterLayout = new QHBoxLayout();
-    filterLayout->addWidget(new QLabel("Filter:"));
+    auto *filterLabel = new QLabel();
+    UiLanguage::bindText(filterLabel, "Filter:", "筛选：");
+    filterLayout->addWidget(filterLabel);
     m_typeFilter = new QComboBox();
-    m_typeFilter->addItems({"All", "Daily", "Weekly"});
+    m_typeFilter->addItem("", "");
+    m_typeFilter->addItem("", "daily");
+    m_typeFilter->addItem("", "weekly");
+    UiLanguage::bindComboItem(m_typeFilter, 0, "All", "全部");
+    UiLanguage::bindComboItem(m_typeFilter, 1, "Daily", "日报");
+    UiLanguage::bindComboItem(m_typeFilter, 2, "Weekly", "周报");
     filterLayout->addWidget(m_typeFilter);
     filterLayout->addStretch();
 
-    auto *refreshBtn = new QPushButton("Refresh");
+    auto *refreshBtn = new QPushButton();
+    UiLanguage::bindText(refreshBtn, "Refresh", "刷新");
     connect(refreshBtn, &QPushButton::clicked, this, &ReportHistoryWidget::refresh);
     filterLayout->addWidget(refreshBtn);
     connect(m_typeFilter, &QComboBox::currentTextChanged, this, &ReportHistoryWidget::refresh);
@@ -35,7 +44,12 @@ void ReportHistoryWidget::setupUi()
 
     m_table = new QTableWidget(this);
     m_table->setColumnCount(5);
-    m_table->setHorizontalHeaderLabels({"Date", "Type", "Title", "Backend", "Generated"});
+    m_table->setHorizontalHeaderLabels({"", "", "", "", ""});
+    UiLanguage::bindHeader(m_table, 0, "Date", "日期");
+    UiLanguage::bindHeader(m_table, 1, "Type", "类型");
+    UiLanguage::bindHeader(m_table, 2, "Title", "标题");
+    UiLanguage::bindHeader(m_table, 3, "AI provider", "AI 服务");
+    UiLanguage::bindHeader(m_table, 4, "Generated", "生成时间");
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -61,8 +75,7 @@ void ReportHistoryWidget::refresh()
 {
     m_table->setRowCount(0);
     auto reports = m_reportRepo->getReports(0, 100);
-    QString filter = m_typeFilter->currentText().toLower();
-    if (filter == "all") filter = {};
+    const QString filter = m_typeFilter->currentData().toString();
 
     int row = 0;
     for (const auto &r : reports) {
@@ -73,7 +86,10 @@ void ReportHistoryWidget::refresh()
         auto *dateItem = new QTableWidgetItem(r.reportDate.toString("yyyy-MM-dd"));
         dateItem->setData(Qt::UserRole, QVariant::fromValue(r.id));
         m_table->setItem(row, 0, dateItem);
-        m_table->setItem(row, 1, new QTableWidgetItem(r.reportType));
+        m_table->setItem(row, 1, new QTableWidgetItem(
+            r.reportType == "weekly"
+                ? UiLanguage::text("Weekly", "周报")
+                : UiLanguage::text("Daily", "日报")));
         m_table->setItem(row, 2, new QTableWidgetItem(r.title));
         m_table->setItem(row, 3, new QTableWidgetItem(r.llmBackend));
         m_table->setItem(row, 4, new QTableWidgetItem(r.createdAt.toString("yyyy-MM-dd HH:mm")));

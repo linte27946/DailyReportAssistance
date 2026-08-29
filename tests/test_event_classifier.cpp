@@ -56,6 +56,18 @@ private slots:
         QCOMPARE(result.category, EventCategory::Documentation);
     }
 
+    void testDocumentationMetadataClassifiesAnyBrowser()
+    {
+        ActivityClassifier classifier;
+        RawEvent event;
+        event.timestamp = QDateTime::currentDateTimeUtc();
+        event.type = EventType::UrlVisited;
+        event.processName = "firefox";
+        event.metadata["isDocumentation"] = true;
+
+        QCOMPARE(classifier.classify(event).category, EventCategory::Documentation);
+    }
+
     void testUnknownClassifiedAsOther()
     {
         ActivityClassifier classifier;

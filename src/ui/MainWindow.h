@@ -3,6 +3,8 @@
 #include <QMainWindow>
 #include <QStackedWidget>
 
+class QLabel;
+class QListWidget;
 class ReportViewer;
 class ReportHistoryWidget;
 class SettingsDialog;
@@ -47,9 +49,13 @@ signals:
 private:
     void setupUi();
     void createMenuBar();
-    void createToolBar();
+    void selectPage(int index);
+    void updatePageHeader(int index);
 
     QStackedWidget *m_stack = nullptr;
+    QListWidget *m_navigation = nullptr;
+    QLabel *m_pageTitle = nullptr;
+    QLabel *m_pageSubtitle = nullptr;
     ReportViewer *m_reportViewer = nullptr;
     ReportHistoryWidget *m_historyWidget = nullptr;
     SettingsDialog *m_settingsDialog = nullptr;

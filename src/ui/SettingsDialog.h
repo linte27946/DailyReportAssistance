@@ -41,7 +41,10 @@ private:
     QListWidget *m_projectPathsList = nullptr;
     QCheckBox *m_gitTrackingChk = nullptr;
     QCheckBox *m_browserTrackingChk = nullptr;
+    QCheckBox *m_browserFullUrlChk = nullptr;
     QCheckBox *m_buildTrackingChk = nullptr;
+    QCheckBox *m_editorTrackingChk = nullptr;
+    QCheckBox *m_documentTrackingChk = nullptr;
 
     // LLM tab widgets
     QComboBox *m_backendCombo = nullptr;
@@ -56,7 +59,7 @@ private:
     QComboBox *m_templateCombo = nullptr;
     QTextEdit *m_templateEdit = nullptr;
     QTimeEdit *m_dailyTimeEdit = nullptr;
-    QSpinBox *m_weeklyDaySpin = nullptr;
+    QComboBox *m_weeklyDayCombo = nullptr;
     QTimeEdit *m_weeklyTimeEdit = nullptr;
     QComboBox *m_languageCombo = nullptr;
 

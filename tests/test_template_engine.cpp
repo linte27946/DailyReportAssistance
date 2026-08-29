@@ -77,6 +77,43 @@ private slots:
         QCOMPARE(context["file_edit_count"], "42");
         QCOMPARE(context["git_commit_count"], "5");
     }
+
+    void testDeveloperAndResearchContextAreStructured()
+    {
+        ActivitySummary summary;
+        summary.date = QDate(2026, 8, 29);
+        Timeline timeline;
+
+        ActivityEvent editor;
+        editor.timestamp = QDateTime(summary.date, QTime(9, 15), Qt::UTC);
+        editor.type = EventType::EditorContextChanged;
+        editor.category = EventCategory::Coding;
+        editor.description = "Editing Dashboard.tsx in project customer-portal with Visual Studio Code";
+        timeline.addEvent(editor);
+
+        ActivityEvent page;
+        page.timestamp = QDateTime(summary.date, QTime(10, 30), Qt::UTC);
+        page.type = EventType::UrlVisited;
+        page.category = EventCategory::Documentation;
+        page.description = "Browser page: CSS grid guide (developer.mozilla.org)";
+        page.metadata["pageTitle"] = "CSS grid guide";
+        page.metadata["domain"] = "developer.mozilla.org";
+        timeline.addEvent(page);
+
+        ActivityEvent document;
+        document.timestamp = QDateTime(summary.date, QTime(11, 0), Qt::UTC);
+        document.type = EventType::DocumentViewed;
+        document.category = EventCategory::Documentation;
+        document.description = "Reference document: frontend-architecture.pdf";
+        timeline.addEvent(document);
+
+        const auto context = TemplateEngine::buildReportContext(
+            summary, timeline, summary.date);
+        QVERIFY(context["editor_contexts"].contains("Dashboard.tsx"));
+        QVERIFY(context["web_pages"].contains("developer.mozilla.org"));
+        QVERIFY(context["documents_viewed"].contains("frontend-architecture.pdf"));
+        QVERIFY(context["research_context"].contains("CSS grid guide"));
+    }
 };
 
 QTEST_MAIN(TestTemplateEngine)

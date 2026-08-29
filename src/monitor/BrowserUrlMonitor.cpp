@@ -1,5 +1,7 @@
 #include "BrowserUrlMonitor.h"
 #include "WindowFocusMonitor.h"
+#include <QRegularExpression>
+#include <QUrl>
 #include <spdlog/spdlog.h>
 
 #ifdef _WIN32
@@ -15,7 +17,8 @@ const QSet<QString> &BrowserUrlMonitor::browserProcesses()
     static const QSet<QString> procs = {
         "chrome.exe", "msedge.exe", "firefox.exe",
         "brave.exe", "opera.exe", "iexplore.exe",
-        "chrome", "google-chrome", "chromium", "firefox", "brave"
+        "chrome", "google-chrome", "chromium", "chromium-browser",
+        "firefox", "brave", "microsoft-edge", "opera"
     };
     return procs;
 }
@@ -35,6 +38,7 @@ BrowserUrlMonitor::BrowserUrlMonitor(QObject *parent)
         "reddit.com/r/programming", "reddit.com/r/cpp",
         "arxiv.org",
         "npmjs.com", "pypi.org", "crates.io",
+        "documentation", "developer guide", "api reference", "tutorial", "MDN",
     };
 
     m_pollTimer = new QTimer(this);
@@ -56,14 +60,10 @@ bool BrowserUrlMonitor::start()
 #ifdef _WIN32
     s_instance_for_automation = this;
     initAutomation();
-#else
-    const QString error = "Browser URL capture is not available on Linux without a browser integration.";
-    spdlog::warn("BrowserUrlMonitor: {}", error.toStdString());
-    emit monitorError(name(), error);
-    return false;
 #endif
     m_pollTimer->start();
     setRunning(true);
+    pollBrowserUrl();
     return true;
 }
 
@@ -92,25 +92,33 @@ void BrowserUrlMonitor::addDocUrlPattern(const QString &pattern)
 
 void BrowserUrlMonitor::pollBrowserUrl()
 {
-#ifdef _WIN32
     auto info = WindowFocusMonitor::getForegroundWindowInfo();
 
     if (!isBrowserWindow(info.processName)) return;
 
-    QString url = getBrowserUrl(info.hwnd);
-    if (url.isEmpty() || url == m_currentUrl) return;
+    QString rawUrl;
+#ifdef _WIN32
+    rawUrl = getBrowserUrl(info.hwnd);
+#endif
+    const QString url = sanitizeUrl(rawUrl, m_captureFullUrl);
+    QString pageTitle = info.title.trimmed();
+    pageTitle.remove(QRegularExpression(
+        R"(\s+[-—]\s+(Google Chrome|Microsoft Edge|Mozilla Firefox|Brave|Opera)\s*$)",
+        QRegularExpression::CaseInsensitiveOption));
+    const QString pageKey = url + "|" + pageTitle;
+    if (pageKey == "|" || pageKey == m_currentPageKey) return;
 
-    m_currentUrl = url;
+    m_currentPageKey = pageKey;
 
     // Deduplicate: skip URLs we've recently seen
     {
         QMutexLocker lock(&m_mutex);
-        if (m_recentUrls.contains(url)) return;
-        m_recentUrls.insert(url);
+        if (m_recentPages.contains(pageKey)) return;
+        m_recentPages.insert(pageKey);
         // Keep the recent set bounded
-        if (m_recentUrls.size() > 200) {
-            m_recentUrls.clear();
-            m_recentUrls.insert(url);
+        if (m_recentPages.size() > 500) {
+            m_recentPages.clear();
+            m_recentPages.insert(pageKey);
         }
     }
 
@@ -121,15 +129,25 @@ void BrowserUrlMonitor::pollBrowserUrl()
     event.processName = info.processName;
     event.windowTitle = info.title;
     event.url = url;
-    event.description = QString("Browsing: %1").arg(url);
+    const QString host = QUrl(url).host();
+    if (!pageTitle.isEmpty() && !host.isEmpty())
+        event.description = QString("Browser page: %1 (%2)").arg(pageTitle, host);
+    else if (!pageTitle.isEmpty())
+        event.description = QString("Browser page: %1").arg(pageTitle);
+    else
+        event.description = QString("Browsing: %1").arg(url);
     event.metadata["url"] = url;
+    event.metadata["domain"] = host;
+    event.metadata["pageTitle"] = pageTitle;
     event.metadata["processName"] = info.processName;
+    event.metadata["queryCaptured"] = m_captureFullUrl;
 
     // Check if it's a documentation URL
     {
         QMutexLocker lock(&m_mutex);
         for (const auto &pattern : m_docUrlPatterns) {
-            if (url.contains(pattern, Qt::CaseInsensitive)) {
+            if (url.contains(pattern, Qt::CaseInsensitive)
+                || pageTitle.contains(pattern, Qt::CaseInsensitive)) {
                 event.metadata["isDocumentation"] = true;
                 break;
             }
@@ -137,9 +155,19 @@ void BrowserUrlMonitor::pollBrowserUrl()
     }
 
     emit rawEventCaptured(event);
-#else
-    Q_UNUSED(this);
-#endif
+}
+
+QString BrowserUrlMonitor::sanitizeUrl(const QString &url, bool includeQuery)
+{
+    QUrl parsed = QUrl::fromUserInput(url.trimmed());
+    if (!parsed.isValid()) return {};
+    const QString scheme = parsed.scheme().toLower();
+    if (scheme != "http" && scheme != "https") return {};
+
+    parsed.setUserInfo({});
+    parsed.setFragment({});
+    if (!includeQuery) parsed.setQuery({});
+    return parsed.toString(QUrl::FullyEncoded);
 }
 
 bool BrowserUrlMonitor::isBrowserWindow(const QString &processName)

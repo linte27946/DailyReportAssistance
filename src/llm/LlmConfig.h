@@ -59,6 +59,16 @@ struct LlmConfig {
         return cfg;
     }
 
+    static LlmConfig deepSeekDefault()
+    {
+        LlmConfig cfg;
+        cfg.endpoint = "https://api.deepseek.com/chat/completions";
+        cfg.model = "deepseek-v4-flash";
+        cfg.temperature = 0.7;
+        cfg.maxTokens = 4096;
+        return cfg;
+    }
+
     static LlmConfig ollamaDefault()
     {
         LlmConfig cfg;

@@ -9,20 +9,31 @@
 #include <spdlog/spdlog.h>
 
 OpenAiBackend::OpenAiBackend(QObject *parent)
+    : OpenAiBackend("OpenAI", LlmConfig::openAiDefault(), parent)
+{
+}
+
+OpenAiBackend::OpenAiBackend(const QString &backendName,
+                             const LlmConfig &defaultConfig,
+                             QObject *parent)
     : ILlmBackend(parent)
     , m_nam(new QNetworkAccessManager(this))
+    , m_backendName(backendName)
+    , m_defaultConfig(defaultConfig)
 {
-    m_config = LlmConfig::openAiDefault();
+    m_config = m_defaultConfig;
 }
 
 void OpenAiBackend::configure(const LlmConfig &config)
 {
     m_config = config;
     m_config.endpoint = config.endpoint.isEmpty()
-        ? LlmConfig::openAiDefault().endpoint
+        ? m_defaultConfig.endpoint
         : config.endpoint;
-    spdlog::info("OpenAI backend configured: endpoint={}, model={}",
-                 m_config.endpoint.toStdString(), m_config.model.toStdString());
+    if (m_config.model.trimmed().isEmpty()) m_config.model = m_defaultConfig.model;
+    spdlog::info("{} backend configured: endpoint={}, model={}",
+                 m_backendName.toStdString(), m_config.endpoint.toStdString(),
+                 m_config.model.toStdString());
 }
 
 void OpenAiBackend::cancel()
@@ -109,7 +120,8 @@ QFuture<QString> OpenAiBackend::generate(const QString &systemPrompt,
         m_activeReply = nullptr;
 
         if (reply->error() != QNetworkReply::NoError) {
-            QString error = QString("OpenAI API error: %1").arg(reply->errorString());
+            QString error = QString("%1 API error: %2")
+                                .arg(m_backendName, reply->errorString());
             spdlog::error(error.toStdString());
             emit generationError(error);
             fi->reportResult("Error: " + error);
@@ -122,8 +134,8 @@ QFuture<QString> OpenAiBackend::generate(const QString &systemPrompt,
             emit generationComplete(*accumulatedText);
             fi->reportResult(*accumulatedText);
         } else {
-            emit generationError("OpenAI returned empty response.");
-            fi->reportResult("Error: OpenAI returned an empty response.");
+            emit generationError(m_backendName + " returned an empty response.");
+            fi->reportResult("Error: " + m_backendName + " returned an empty response.");
         }
 
         fi->reportFinished();

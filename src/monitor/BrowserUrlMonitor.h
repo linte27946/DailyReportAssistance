@@ -30,6 +30,12 @@ public:
     void setDocUrlPatterns(const QSet<QString> &patterns);
     void addDocUrlPattern(const QString &pattern);
 
+    /// Include URL query strings. Disabled by default because queries can
+    /// contain search terms, tokens, document IDs, and other private data.
+    void setCaptureFullUrl(bool enabled) { m_captureFullUrl = enabled; }
+
+    static QString sanitizeUrl(const QString &url, bool includeQuery = false);
+
 private:
     void pollBrowserUrl();
 
@@ -51,10 +57,11 @@ private:
 
     QTimer *m_pollTimer = nullptr;
     QSet<QString> m_docUrlPatterns;
-    QSet<QString> m_recentUrls;        // Dedup recent URLs
-    QString m_currentUrl;
+    QSet<QString> m_recentPages;
+    QString m_currentPageKey;
     QMutex m_mutex;
     int m_pollIntervalMs = 3000;
+    bool m_captureFullUrl = false;
 
     // Known browser process names
     static const QSet<QString> &browserProcesses();

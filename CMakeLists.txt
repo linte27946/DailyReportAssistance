@@ -118,63 +118,72 @@ endif()
 if(WIN32)
     set(QT_PLUGIN_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TRIPLET}/Qt6/plugins"
         CACHE PATH "Qt6 plugins directory")
+    set(QT_DEBUG_PLUGIN_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TRIPLET}/debug/Qt6/plugins"
+        CACHE PATH "Qt6 debug plugins directory")
     set(QT_BIN_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TRIPLET}/bin"
         CACHE PATH "Qt6 runtime DLLs directory")
+    set(QT_DEBUG_BIN_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TRIPLET}/debug/bin"
+        CACHE PATH "Qt6 debug runtime DLLs directory")
+    set(QT_ACTIVE_PLUGIN_DIR
+        "$<IF:$<CONFIG:Debug>,${QT_DEBUG_PLUGIN_DIR},${QT_PLUGIN_DIR}>")
+    set(QT_ACTIVE_BIN_DIR
+        "$<IF:$<CONFIG:Debug>,${QT_DEBUG_BIN_DIR},${QT_BIN_DIR}>")
 
     add_custom_target(deploy
         COMMENT "Deploying Qt plugins and runtime DLLs..."
     )
+    add_dependencies(deploy DailyReport)
 
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:DailyReport>/platforms"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${QT_PLUGIN_DIR}/platforms/qwindows$<$<CONFIG:Debug>:d>.dll"
+            "${QT_ACTIVE_PLUGIN_DIR}/platforms/qwindows$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/platforms/"
     )
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:DailyReport>/sqldrivers"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${QT_PLUGIN_DIR}/sqldrivers/qsqlite$<$<CONFIG:Debug>:d>.dll"
+            "${QT_ACTIVE_PLUGIN_DIR}/sqldrivers/qsqlite$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/sqldrivers/"
     )
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:DailyReport>/styles"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${QT_PLUGIN_DIR}/styles/qmodernwindowsstyle$<$<CONFIG:Debug>:d>.dll"
+            "${QT_ACTIVE_PLUGIN_DIR}/styles/qmodernwindowsstyle$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/styles/"
     )
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:DailyReport>/imageformats"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${QT_PLUGIN_DIR}/imageformats/qjpeg$<$<CONFIG:Debug>:d>.dll"
-            "${QT_PLUGIN_DIR}/imageformats/qgif$<$<CONFIG:Debug>:d>.dll"
-            "${QT_PLUGIN_DIR}/imageformats/qico$<$<CONFIG:Debug>:d>.dll"
+            "${QT_ACTIVE_PLUGIN_DIR}/imageformats/qjpeg$<$<CONFIG:Debug>:d>.dll"
+            "${QT_ACTIVE_PLUGIN_DIR}/imageformats/qgif$<$<CONFIG:Debug>:d>.dll"
+            "${QT_ACTIVE_PLUGIN_DIR}/imageformats/qico$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/imageformats/"
     )
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:DailyReport>/tls"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${QT_PLUGIN_DIR}/tls/qschannelbackend$<$<CONFIG:Debug>:d>.dll"
-            "${QT_PLUGIN_DIR}/tls/qopensslbackend$<$<CONFIG:Debug>:d>.dll"
-            "${QT_PLUGIN_DIR}/tls/qcertonlybackend$<$<CONFIG:Debug>:d>.dll"
+            "${QT_ACTIVE_PLUGIN_DIR}/tls/qschannelbackend$<$<CONFIG:Debug>:d>.dll"
+            "${QT_ACTIVE_PLUGIN_DIR}/tls/qopensslbackend$<$<CONFIG:Debug>:d>.dll"
+            "${QT_ACTIVE_PLUGIN_DIR}/tls/qcertonlybackend$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/tls/"
     )
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:DailyReport>/networkinformation"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${QT_PLUGIN_DIR}/networkinformation/qnetworklistmanager$<$<CONFIG:Debug>:d>.dll"
+            "${QT_ACTIVE_PLUGIN_DIR}/networkinformation/qnetworklistmanager$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/networkinformation/"
     )
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${QT_BIN_DIR}/Qt6Network$<$<CONFIG:Debug>:d>.dll"
-            "${QT_BIN_DIR}/Qt6DBus$<$<CONFIG:Debug>:d>.dll"
+            "${QT_ACTIVE_BIN_DIR}/Qt6Network$<$<CONFIG:Debug>:d>.dll"
+            "${QT_ACTIVE_BIN_DIR}/Qt6DBus$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/"
     )
     message(STATUS "Deploy target configured — run: cmake --build build --target deploy")

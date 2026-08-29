@@ -4,6 +4,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QDir>
+#include <QLocale>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -14,11 +15,13 @@
 #include "ui/MainWindow.h"
 #include "ui/SystemTray.h"
 #include "ui/SetupWizard.h"
+#include "ui/UiLanguage.h"
 #include "report/TemplateEngine.h"
 #include "report/ReportGenerator.h"
 #include "report/ReportScheduler.h"
 #include "llm/LlmClient.h"
 #include "llm/OpenAiBackend.h"
+#include "llm/DeepSeekBackend.h"
 #include "llm/AnthropicBackend.h"
 #include "llm/OllamaBackend.h"
 #include "storage/EventRepository.h"
@@ -28,6 +31,7 @@
 #include "monitor/FileSystemMonitor.h"
 #include "monitor/ProcessMonitor.h"
 #include "monitor/WindowFocusMonitor.h"
+#include "monitor/WorkContextMonitor.h"
 #include "monitor/InputActivityMonitor.h"
 #include "monitor/BrowserUrlMonitor.h"
 #include "monitor/GitMonitor.h"
@@ -52,6 +56,7 @@ QStringList monitoredPaths(SettingsRepository *settings)
 LlmConfig defaultLlmConfig(const QString &backend)
 {
     if (backend == "Anthropic") return LlmConfig::anthropicDefault();
+    if (backend == "DeepSeek") return LlmConfig::deepSeekDefault();
     if (backend == "Ollama") return LlmConfig::ollamaDefault();
     return LlmConfig::openAiDefault();
 }
@@ -106,6 +111,8 @@ int main(int argc, char *argv[])
     // Construct QApplication first so QStandardPaths and platform plugins are
     // initialized before logging and single-instance coordination use them.
     Application app(argc, argv);
+    UiLanguage::setLanguage(
+        QLocale::system().language() == QLocale::Chinese ? "zh-CN" : "en");
     Log::init();
     spdlog::info("DailyReport starting...");
 
@@ -128,9 +135,12 @@ int main(int argc, char *argv[])
     // Initialize application services
     if (!app.initialize()) {
         spdlog::critical("Failed to initialize application services.");
-        QMessageBox::critical(nullptr, "DailyReport",
-                              "Failed to initialize application services.\n"
-                              "Please check the log files for details.");
+        QMessageBox::critical(
+            nullptr, "DailyReport",
+            UiLanguage::text(
+                "Failed to initialize application services.\n"
+                "Please check the log files for details.",
+                "应用服务初始化失败。\n请检查日志文件了解详细信息。"));
         return 1;
     }
 
@@ -143,8 +153,11 @@ int main(int argc, char *argv[])
     auto *reportRepo = new ReportRepository();
     auto *settingsRepo = new SettingsRepository();
 
+    UiLanguage::setLanguage(settingsRepo->getValue("language", UiLanguage::language()));
+
     templateEngine->loadFromDatabase();
     llmClient->registerBackend(std::make_unique<OpenAiBackend>());
+    llmClient->registerBackend(std::make_unique<DeepSeekBackend>());
     llmClient->registerBackend(std::make_unique<AnthropicBackend>());
     llmClient->registerBackend(std::make_unique<OllamaBackend>());
 
@@ -182,14 +195,31 @@ int main(int argc, char *argv[])
     }
 
     monitorEngine->registerMonitor(std::move(processMonitor));
-    monitorEngine->registerMonitor(std::make_unique<WindowFocusMonitor>());
+    auto windowFocusMonitor = std::make_unique<WindowFocusMonitor>();
+    WindowFocusMonitor *windowFocusMonitorPtr = windowFocusMonitor.get();
+    const bool trackEditors = settingsRepo->getBool("editor_tracking_enabled", true);
+    const bool trackDocuments = settingsRepo->getBool("document_tracking_enabled", true);
+    if (trackEditors || trackDocuments) {
+        auto workContextMonitor = std::make_unique<WorkContextMonitor>();
+        workContextMonitor->setTrackEditors(trackEditors);
+        workContextMonitor->setTrackDocuments(trackDocuments);
+        WorkContextMonitor *workContextMonitorPtr = workContextMonitor.get();
+        QObject::connect(windowFocusMonitorPtr, &IMonitor::rawEventCaptured,
+                         workContextMonitorPtr, &WorkContextMonitor::processWindowEvent);
+        monitorEngine->registerMonitor(std::move(workContextMonitor));
+    }
+    monitorEngine->registerMonitor(std::move(windowFocusMonitor));
 
     auto inputMonitor = std::make_unique<InputActivityMonitor>();
     inputMonitor->setAfkThreshold(settingsRepo->getInt("afk_threshold_secs", 300));
     monitorEngine->registerMonitor(std::move(inputMonitor));
 
-    if (settingsRepo->getBool("browser_tracking_enabled", true))
-        monitorEngine->registerMonitor(std::make_unique<BrowserUrlMonitor>());
+    if (settingsRepo->getBool("browser_tracking_enabled", true)) {
+        auto browserMonitor = std::make_unique<BrowserUrlMonitor>();
+        browserMonitor->setCaptureFullUrl(
+            settingsRepo->getBool("browser_capture_full_url", false));
+        monitorEngine->registerMonitor(std::move(browserMonitor));
+    }
 
     if (settingsRepo->getBool("git_tracking_enabled", true)) {
         auto gitMonitor = std::make_unique<GitMonitor>();

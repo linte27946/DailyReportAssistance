@@ -3,7 +3,73 @@
 #include "storage/SettingsRepository.h"
 #include <QSqlQuery>
 #include <QSqlError>
+#include <QFileInfo>
+#include <QSet>
 #include <spdlog/spdlog.h>
+
+namespace {
+
+bool isReportWorthy(EventType type)
+{
+    switch (type) {
+    case EventType::FileCreated:
+    case EventType::FileModified:
+    case EventType::FileDeleted:
+    case EventType::FileRenamed:
+    case EventType::EditorContextChanged:
+    case EventType::DocumentViewed:
+    case EventType::UrlVisited:
+    case EventType::GitCommit:
+    case EventType::GitPush:
+    case EventType::GitPull:
+    case EventType::GitBranchSwitch:
+    case EventType::GitMerge:
+    case EventType::BuildStarted:
+    case EventType::BuildCompleted:
+        return true;
+    default:
+        return false;
+    }
+}
+
+QString safeEventDescription(const ActivityEvent &event)
+{
+    if (!event.filePath.isEmpty()) {
+        const QString projectName = event.metadata.value("projectName").toString();
+        const QString relativePath = event.metadata.value("relativePath").toString();
+        if (!projectName.isEmpty() && !relativePath.isEmpty()) {
+            return QString("%1 in %2: %3")
+                .arg(eventTypeToString(event.type), projectName, relativePath);
+        }
+        return QString("%1: %2")
+            .arg(eventTypeToString(event.type), QFileInfo(event.filePath).fileName());
+    }
+    if (event.type == EventType::UrlVisited) {
+        const QString title = event.metadata.value("pageTitle").toString();
+        const QString domain = event.metadata.value("domain").toString();
+        if (!title.isEmpty() && !domain.isEmpty())
+            return QString("Browser page: %1 (%2)").arg(title, domain);
+    }
+    return event.description.left(180);
+}
+
+void appendUnique(QStringList &target, QSet<QString> &seen,
+                  const ActivityEvent &event, int limit)
+{
+    if (target.size() >= limit) return;
+    const QString description = safeEventDescription(event).trimmed();
+    if (description.isEmpty() || seen.contains(description)) return;
+    seen.insert(description);
+    target.append(QString("- %1 — %2")
+                      .arg(event.timestamp.toLocalTime().toString("HH:mm"), description));
+}
+
+QString listOrNone(const QStringList &values)
+{
+    return values.isEmpty() ? "- (none recorded)" : values.join("\n");
+}
+
+} // namespace
 
 TemplateEngine::TemplateEngine(QObject *parent)
     : QObject(parent)
@@ -133,15 +199,47 @@ QMap<QString, QString> TemplateEngine::buildReportContext(
         apps.append(QString("  - %1").arg(a));
     ctx["top_applications"] = apps.isEmpty() ? "  (none)" : apps.join("\n");
 
+    QStringList development;
+    QStringList editorContexts;
+    QStringList research;
+    QStringList documents;
+    QStringList webPages;
+    QSet<QString> developmentSeen;
+    QSet<QString> editorSeen;
+    QSet<QString> researchSeen;
+    QSet<QString> documentSeen;
+    QSet<QString> webSeen;
+    for (const auto &event : timeline.events()) {
+        if (!isReportWorthy(event.type)) continue;
+        if (event.type == EventType::EditorContextChanged)
+            appendUnique(editorContexts, editorSeen, event, 40);
+        if (event.type == EventType::DocumentViewed)
+            appendUnique(documents, documentSeen, event, 30);
+        if (event.type == EventType::UrlVisited)
+            appendUnique(webPages, webSeen, event, 40);
+        if (event.category == EventCategory::Documentation
+            || event.category == EventCategory::Browsing
+            || event.type == EventType::DocumentViewed) {
+            appendUnique(research, researchSeen, event, 50);
+        } else {
+            appendUnique(development, developmentSeen, event, 60);
+        }
+    }
+    ctx["development_context"] = listOrNone(development);
+    ctx["editor_contexts"] = listOrNone(editorContexts);
+    ctx["research_context"] = listOrNone(research);
+    ctx["documents_viewed"] = listOrNone(documents);
+    ctx["web_pages"] = listOrNone(webPages);
+
     // Build a simple timeline table
     QStringList timelineRows;
     const auto &events = timeline.events();
-    for (int i = 0; i < qMin(events.size(), 50); ++i) {
-        const auto &e = events[i];
+    for (const auto &e : events) {
+        if (!isReportWorthy(e.type) || timelineRows.size() >= 80) continue;
         timelineRows.append(QString("| %1 | %2 | %3 | %4 |")
                                 .arg(e.timestamp.toLocalTime().toString("HH:mm:ss"))
                                 .arg(eventCategoryToString(e.category))
-                                .arg(e.description.left(60))
+                                .arg(safeEventDescription(e).replace('|', '/').left(100))
                                 .arg(e.durationSecs > 0 ? QString("%1s").arg(e.durationSecs) : "-"));
     }
     if (timelineRows.isEmpty())
@@ -223,6 +321,21 @@ Group related activities together. Mention specific files worked on and any nota
 
 ## Top Applications
 {{top_applications}}
+
+## Development Context
+{{development_context}}
+
+## Editor Files and Projects
+{{editor_contexts}}
+
+## Technical Research and Learning
+{{research_context}}
+
+## Reference Documents
+{{documents_viewed}}
+
+## Browser Pages
+{{web_pages}}
 
 ## Activity Timeline
 {{timeline_table}}

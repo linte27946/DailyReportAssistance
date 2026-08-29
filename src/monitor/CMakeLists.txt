@@ -4,6 +4,7 @@ add_library(dailyreport_monitor STATIC
     FileSystemMonitor.cpp
     ProcessMonitor.cpp
     WindowFocusMonitor.cpp
+    WorkContextMonitor.cpp
     InputActivityMonitor.cpp
     BrowserUrlMonitor.cpp
     GitMonitor.cpp

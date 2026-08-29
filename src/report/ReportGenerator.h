@@ -47,6 +47,11 @@ public:
     /// Regenerate an existing report (re-uses the same date/type).
     QFuture<ReportResult> regenerateReport(const QDate &date, const QString &type);
 
+    /// Build a self-contained prompt package for use with a free AI website.
+    /// This does not call an API and never includes source/document contents.
+    QString buildExternalPrompt(const QDate &date = QDate::currentDate(),
+                                const QString &type = "daily");
+
     void setReportLanguage(const QString &language);
 
     bool reportExists(const QDate &date, const QString &type) const;

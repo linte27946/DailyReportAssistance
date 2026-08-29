@@ -23,6 +23,21 @@ Group related activities together. Mention specific files worked on and any nota
 ## Top Applications
 {{top_applications}}
 
+## Development Context
+{{development_context}}
+
+## Editor Files and Projects
+{{editor_contexts}}
+
+## Technical Research and Learning
+{{research_context}}
+
+## Reference Documents
+{{documents_viewed}}
+
+## Browser Pages
+{{web_pages}}
+
 ## Activity Timeline
 {{timeline_table}}
 

@@ -5,6 +5,7 @@
 #include <QDateEdit>
 
 class EventRepository;
+class QLabel;
 
 /// Visual timeline showing raw activity events for the selected date.
 class TimelineWidget : public QWidget {
@@ -21,4 +22,5 @@ private:
     EventRepository *m_eventRepo = nullptr;
     QTableWidget *m_table = nullptr;
     QDateEdit *m_dateEdit = nullptr;
+    QLabel *m_totalLabel = nullptr;
 };

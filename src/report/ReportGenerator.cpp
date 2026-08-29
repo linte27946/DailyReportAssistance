@@ -81,6 +81,54 @@ QFuture<ReportResult> ReportGenerator::regenerateReport(const QDate &date, const
     return type == "weekly" ? generateWeeklyReport(date) : generateDailyReport(date);
 }
 
+QString ReportGenerator::buildExternalPrompt(const QDate &date, const QString &type)
+{
+    Timeline timeline;
+    QMap<QString, QString> context;
+    QDate effectiveDate = date;
+
+    if (type == "weekly") {
+        const QDate weekStart = date.addDays(-(date.dayOfWeek() - 1));
+        timeline = m_eventRepo->queryDateRange(weekStart, weekStart.addDays(6));
+        QList<QPair<QDate, ActivitySummary>> dailySummaries;
+        for (int i = 0; i < 7; ++i) {
+            const QDate day = weekStart.addDays(i);
+            dailySummaries.append({day, timeline.forDate(day).computeSummary(day)});
+        }
+        context = TemplateEngine::buildWeeklyContext(
+            dailySummaries, timeline, weekStart);
+        effectiveDate = weekStart;
+    } else {
+        timeline = m_eventRepo->queryTimeline(date);
+        context = TemplateEngine::buildReportContext(
+            timeline.computeSummary(date), timeline, date);
+    }
+
+    const QString templateName = type == "weekly" ? "weekly_report" : "daily_report";
+    const QString activityPrompt = m_templateEngine->render(templateName, context);
+    QString reportLanguage;
+    {
+        QMutexLocker locker(&m_configMutex);
+        reportLanguage = m_reportLanguage;
+    }
+    const QString languageName = reportLanguage == "en"
+        ? "English" : "Simplified Chinese";
+
+    return QString(
+        "# DailyReport AI Summary Package\n\n"
+        "- Report type: %1\n"
+        "- Report date: %2\n"
+        "- Output language: %3\n"
+        "- Privacy: contains activity metadata only; no source code or document contents\n\n"
+        "## Instructions for the AI\n\n"
+        "Create a clear, concise software-developer work report in %3 using the activity data below. "
+        "Write in first person. Group work by project or feature. Separate observed facts from likely "
+        "inferences, do not invent accomplishments, and mention research or documents only when present. "
+        "Return well-structured Markdown.\n\n"
+        "## Collected activity data\n\n%4\n")
+        .arg(type, effectiveDate.toString(Qt::ISODate), languageName, activityPrompt);
+}
+
 ReportResult ReportGenerator::doGenerate(const QDate &date, const QString &type)
 {
     ReportResult result;
@@ -147,7 +195,7 @@ ReportResult ReportGenerator::doGenerate(const QDate &date, const QString &type)
             reportLanguage = m_reportLanguage;
         }
         const QString languageName = reportLanguage == "en"
-            ? "English" : reportLanguage == "ja-JP" ? "Japanese" : "Simplified Chinese";
+            ? "English" : "Simplified Chinese";
         QString systemPrompt = QString(
             "You are a professional assistant that helps software developers "
             "write clear, concise, and informative work reports. "

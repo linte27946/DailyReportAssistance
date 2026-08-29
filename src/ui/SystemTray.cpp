@@ -1,5 +1,6 @@
 #include "SystemTray.h"
 #include "MainWindow.h"
+#include "UiLanguage.h"
 #include "report/ReportGenerator.h"
 #include "report/ReportScheduler.h"
 #include <QApplication>
@@ -28,7 +29,8 @@ bool SystemTray::initialize()
     createMenu();
 
     m_trayIcon->setContextMenu(m_trayMenu);
-    m_trayIcon->setToolTip("DailyReport - Monitoring...");
+    UiLanguage::bindTooltip(m_trayIcon,
+                            "DailyReport - Monitoring...", "DailyReport - 正在监控……");
     m_trayIcon->show();
 
     // Connect report scheduler notifications
@@ -58,7 +60,8 @@ void SystemTray::createMenu()
 {
     m_trayMenu = new QMenu();
 
-    m_viewReportAction = m_trayMenu->addAction("View Today's Report");
+    m_viewReportAction = m_trayMenu->addAction("");
+    UiLanguage::bindText(m_viewReportAction, "View today's report", "查看今天的报告");
     m_viewReportAction->setIcon(QApplication::style()->standardIcon(QStyle::SP_FileDialogDetailedView));
     connect(m_viewReportAction, &QAction::triggered, this, [this]() {
         m_mainWindow->show();
@@ -69,17 +72,22 @@ void SystemTray::createMenu()
 
     m_trayMenu->addSeparator();
 
-    m_generateDailyAction = m_trayMenu->addAction("Generate Daily Report Now");
+    m_generateDailyAction = m_trayMenu->addAction("");
+    UiLanguage::bindText(m_generateDailyAction,
+                         "Generate daily report now", "立即生成日报");
     connect(m_generateDailyAction, &QAction::triggered,
             this, &SystemTray::onGenerateDailyReport);
 
-    m_generateWeeklyAction = m_trayMenu->addAction("Generate Weekly Report Now");
+    m_generateWeeklyAction = m_trayMenu->addAction("");
+    UiLanguage::bindText(m_generateWeeklyAction,
+                         "Generate weekly report now", "立即生成周报");
     connect(m_generateWeeklyAction, &QAction::triggered,
             this, &SystemTray::onGenerateWeeklyReport);
 
     m_trayMenu->addSeparator();
 
-    m_settingsAction = m_trayMenu->addAction("Settings...");
+    m_settingsAction = m_trayMenu->addAction("");
+    UiLanguage::bindText(m_settingsAction, "Settings...", "设置……");
     m_settingsAction->setIcon(QApplication::style()->standardIcon(QStyle::SP_FileDialogDetailedView));
     connect(m_settingsAction, &QAction::triggered, this, [this]() {
         m_mainWindow->show();
@@ -89,7 +97,8 @@ void SystemTray::createMenu()
 
     m_trayMenu->addSeparator();
 
-    m_exitAction = m_trayMenu->addAction("Exit DailyReport");
+    m_exitAction = m_trayMenu->addAction("");
+    UiLanguage::bindText(m_exitAction, "Exit DailyReport", "退出 DailyReport");
     m_exitAction->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogCloseButton));
     connect(m_exitAction, &QAction::triggered, this, [this]() {
         spdlog::info("Exit requested from system tray.");
@@ -128,11 +137,17 @@ void SystemTray::onGenerateWeeklyReport()
 void SystemTray::onReportGenerated(const QString &type, const QDate &date, const QString &content)
 {
     Q_UNUSED(content);
-    QString typeLabel = (type == "weekly") ? "Weekly" : "Daily";
+    const bool weekly = type == "weekly";
+    QString typeLabel = weekly
+        ? UiLanguage::text("Weekly", "周报") : UiLanguage::text("Daily", "日报");
     showNotification(
-        QString("%1 Report Ready").arg(typeLabel),
-        QString("Your %1 report for %2 has been generated.")
-            .arg(typeLabel.toLower(), date.toString("yyyy-MM-dd")));
+        UiLanguage::text(
+            QString("%1 report ready").arg(typeLabel),
+            QString("%1已生成").arg(typeLabel)),
+        UiLanguage::text(
+            QString("Your %1 report for %2 has been generated.")
+                .arg(typeLabel.toLower(), date.toString("yyyy-MM-dd")),
+            QString("%1 的%2已经生成。").arg(date.toString("yyyy-MM-dd"), typeLabel)));
 }
 
 void SystemTray::showNotification(const QString &title, const QString &message,

@@ -34,13 +34,31 @@ void ActivityClassifier::initDefaultRules()
         {"git.exe", "", "", EventType::ProcessStarted, EventCategory::VersionControl, 50, ""},
 
         // IDEs → Coding
+        {"", "", "", EventType::EditorContextChanged, EventCategory::Coding, 100, ""},
         {"devenv.exe", "", "", EventType::WindowFocusChanged, EventCategory::Coding, 40, ""},
         {"code.exe", "", "", EventType::WindowFocusChanged, EventCategory::Coding, 40, ""},
+        {"cursor.exe", "", "", EventType::WindowFocusChanged, EventCategory::Coding, 40, ""},
+        {"vscodium.exe", "", "", EventType::WindowFocusChanged, EventCategory::Coding, 40, ""},
+        {"webstorm64.exe", "", "", EventType::WindowFocusChanged, EventCategory::Coding, 40, ""},
+        {"clion64.exe", "", "", EventType::WindowFocusChanged, EventCategory::Coding, 40, ""},
+        {"rider64.exe", "", "", EventType::WindowFocusChanged, EventCategory::Coding, 40, ""},
         {"idea64.exe", "", "", EventType::WindowFocusChanged, EventCategory::Coding, 40, ""},
         {"pycharm64.exe", "", "", EventType::WindowFocusChanged, EventCategory::Coding, 40, ""},
         {"notepad++.exe", "", "", EventType::WindowFocusChanged, EventCategory::Coding, 35, ""},
         {"sublime_text.exe", "", "", EventType::WindowFocusChanged, EventCategory::Coding, 35, ""},
         {"vim.exe", "", "", EventType::WindowFocusChanged, EventCategory::Coding, 35, ""},
+
+        // Technical documents and office files
+        {"winword.exe", "", "", EventType::WindowFocusChanged, EventCategory::Documentation, 45, ""},
+        {"powerpnt.exe", "", "", EventType::WindowFocusChanged, EventCategory::Documentation, 45, ""},
+        {"excel.exe", "", "", EventType::WindowFocusChanged, EventCategory::Documentation, 40, ""},
+        {"acrord32.exe", "", "", EventType::WindowFocusChanged, EventCategory::Documentation, 45, ""},
+        {"acrobat.exe", "", "", EventType::WindowFocusChanged, EventCategory::Documentation, 45, ""},
+        {"sumatrapdf.exe", "", "", EventType::WindowFocusChanged, EventCategory::Documentation, 45, ""},
+        {"okular", "", "", EventType::WindowFocusChanged, EventCategory::Documentation, 45, ""},
+        {"evince", "", "", EventType::WindowFocusChanged, EventCategory::Documentation, 45, ""},
+        {"libreoffice", "", "", EventType::WindowFocusChanged, EventCategory::Documentation, 45, ""},
+        {"soffice", "", "", EventType::WindowFocusChanged, EventCategory::Documentation, 45, ""},
 
         // Debugging tools
         {"windbg.exe", "", "", EventType::WindowFocusChanged, EventCategory::Debugging, 50, ""},
@@ -59,6 +77,7 @@ void ActivityClassifier::initDefaultRules()
         {"chrome.exe", "", "*github.com*", EventType::UrlVisited, EventCategory::CodeReview, 50, ""},
         {"msedge.exe", "", "*docs.microsoft.com*", EventType::UrlVisited, EventCategory::Documentation, 60, ""},
         {"msedge.exe", "", "*github.com*", EventType::UrlVisited, EventCategory::CodeReview, 50, ""},
+        {"", "", "", EventType::UrlVisited, EventCategory::Browsing, 5, ""},
 
         // Communication
         {"teams.exe", "", "", EventType::WindowFocusChanged, EventCategory::Communication, 45, ""},
@@ -92,6 +111,7 @@ void ActivityClassifier::initDefaultRules()
         {"", ".toml", "", EventType::FileModified, EventCategory::Coding, 20, ""},
 
         // Docs → Documentation
+        {"", "", "", EventType::DocumentViewed, EventCategory::Documentation, 100, ""},
         {"", ".md", "", EventType::FileModified, EventCategory::Documentation, 20, ""},
         {"", ".rst", "", EventType::FileModified, EventCategory::Documentation, 20, ""},
         {"", ".txt", "", EventType::FileModified, EventCategory::Documentation, 15, ""},
@@ -113,6 +133,9 @@ void ActivityClassifier::initDefaultRules()
         {"chrome.exe", "", "", EventType::WindowFocusChanged, EventCategory::Browsing, 10, ""},
         {"msedge.exe", "", "", EventType::WindowFocusChanged, EventCategory::Browsing, 10, ""},
         {"firefox.exe", "", "", EventType::WindowFocusChanged, EventCategory::Browsing, 10, ""},
+        {"google-chrome", "", "", EventType::WindowFocusChanged, EventCategory::Browsing, 10, ""},
+        {"chromium", "", "", EventType::WindowFocusChanged, EventCategory::Browsing, 10, ""},
+        {"firefox", "", "", EventType::WindowFocusChanged, EventCategory::Browsing, 10, ""},
     };
     m_rulesSorted = false;
 }
@@ -195,6 +218,11 @@ QList<ActivityEvent> ActivityClassifier::classifyBatch(const QList<RawEvent> &ra
 EventCategory ActivityClassifier::classifyInternal(const RawEvent &raw)
 {
     ensureRulesSorted();
+
+    if (raw.type == EventType::UrlVisited
+        && raw.metadata.value("isDocumentation").toBool()) {
+        return EventCategory::Documentation;
+    }
 
     QFileInfo fi(raw.filePath);
     QString ext = fi.suffix().isEmpty() ? "" : "." + fi.suffix().toLower();

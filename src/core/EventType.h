@@ -33,6 +33,8 @@ enum class EventType : uint8_t {
 
     // Window events
     WindowFocusChanged,
+    EditorContextChanged,
+    DocumentViewed,
 
     // Input events
     UserActive,
@@ -88,6 +90,8 @@ inline QString eventTypeToString(EventType type)
     case EventType::ProcessStarted:     return "ProcessStarted";
     case EventType::ProcessEnded:       return "ProcessEnded";
     case EventType::WindowFocusChanged: return "WindowFocusChanged";
+    case EventType::EditorContextChanged:return "EditorContextChanged";
+    case EventType::DocumentViewed:     return "DocumentViewed";
     case EventType::UserActive:         return "UserActive";
     case EventType::UserIdle:           return "UserIdle";
     case EventType::UrlVisited:         return "UrlVisited";
@@ -132,6 +136,8 @@ inline EventType eventTypeFromString(const QString &value)
     if (value == "ProcessStarted") return EventType::ProcessStarted;
     if (value == "ProcessEnded") return EventType::ProcessEnded;
     if (value == "WindowFocusChanged") return EventType::WindowFocusChanged;
+    if (value == "EditorContextChanged") return EventType::EditorContextChanged;
+    if (value == "DocumentViewed") return EventType::DocumentViewed;
     if (value == "UserActive") return EventType::UserActive;
     if (value == "UserIdle") return EventType::UserIdle;
     if (value == "UrlVisited") return EventType::UrlVisited;

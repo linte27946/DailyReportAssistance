@@ -34,6 +34,8 @@ public slots:
 private:
     void setupUi();
     void exportToFile();
+    void copyExternalPrompt();
+    void exportExternalPrompt();
 
     ReportGenerator *m_generator = nullptr;
     ReportRepository *m_reportRepo = nullptr;

@@ -2,6 +2,7 @@ add_library(dailyreport_llm STATIC
     ILlmBackend.h
     LlmClient.cpp
     OpenAiBackend.cpp
+    DeepSeekBackend.h
     AnthropicBackend.cpp
     OllamaBackend.cpp
 )

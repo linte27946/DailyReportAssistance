@@ -212,7 +212,23 @@ void FileSystemMonitor::emitFileEvent(EventType type,
     event.type = type;
     event.source = "FileSystemMonitor";
     event.filePath = filePath;
-    event.description = QString("%1: %2").arg(eventTypeToString(type), filePath);
+    QString projectRoot;
+    for (const QString &root : m_watchPaths) {
+        if (filePath.startsWith(root, Qt::CaseInsensitive)
+            && root.size() > projectRoot.size()) {
+            projectRoot = root;
+        }
+    }
+    const QString projectName = QFileInfo(projectRoot).fileName();
+    const QString relativePath = projectRoot.isEmpty()
+        ? QFileInfo(filePath).fileName()
+        : QDir(projectRoot).relativeFilePath(filePath);
+    event.description = projectName.isEmpty()
+        ? QString("%1: %2").arg(eventTypeToString(type), relativePath)
+        : QString("%1 in %2: %3")
+              .arg(eventTypeToString(type), projectName, relativePath);
+    event.metadata["projectName"] = projectName;
+    event.metadata["relativePath"] = relativePath;
     if (state) {
         event.metadata["size"] = state->size;
         event.metadata["lastModified"] = state->lastModified.toString(Qt::ISODateWithMs);

@@ -1,6 +1,6 @@
 # DailyReport — 开发活动日报助手
 
-DailyReport 是一个以 Linux 桌面为主要运行环境、同时保留 Windows 支持的 Qt 6 应用。它在本机采集开发活动，将事件过滤、分类并保存到 SQLite，再调用 OpenAI、Anthropic 或本地 Ollama 生成 Markdown 日报和周报。
+DailyReport 是一个以 Linux 桌面为主要运行环境、同时保留 Windows 支持的 Qt 6 应用。它在本机采集开发活动，将事件过滤、分类并保存到 SQLite，再调用 OpenAI、Anthropic、DeepSeek 或本地 Ollama 生成 Markdown 日报和周报。
 
 ## 当前能力
 
@@ -24,8 +24,11 @@ DailyReport 是一个以 Linux 桌面为主要运行环境、同时保留 Window
 | 构建进程 | ✅ | ✅ | 由进程事件识别 CMake、Ninja、Make、Cargo 等 |
 | 前台窗口 | ⚠️ | ✅ | Linux X11 需要 `xdotool`；Wayland 暂不支持 |
 | 用户空闲 | ⚠️ | ✅ | Linux X11 需要 `xprintidle`；Wayland 暂不支持 |
-| 浏览器 URL | ❌ | ✅ | Linux 需要后续增加浏览器扩展或桌面集成 |
-| OpenAI / Anthropic / Ollama | ✅ | ✅ | 支持流式响应和请求超时 |
+| 编辑器文件/项目上下文 | ⚠️ | ✅ | 支持 VS Code、Cursor、JetBrains、Visual Studio 等；Linux 依赖 X11 窗口信息 |
+| PDF / Office 资料名称 | ⚠️ | ✅ | 支持 PDF、Word、PPT、Excel、LibreOffice/WPS 等，不读取正文 |
+| 浏览器页面 | ⚠️ | ✅ | Windows 记录页面标题和清洗后的活动页 URL；Linux X11 当前记录页面标题 |
+| OpenAI / Anthropic / DeepSeek / Ollama | ✅ | ✅ | 支持流式响应和请求超时 |
+| 无 API 总结包 | ✅ | ✅ | 可复制提示词或导出 Markdown，交给任意 AI 网站总结 |
 | 自动日报/周报 | ✅ | ✅ | 启动后会补生成错过时间但尚不存在的报告 |
 
 不支持的可选监控器不会阻止其他监控器启动。
@@ -60,22 +63,33 @@ cmake --install build --prefix "$HOME/.local"
 ```powershell
 cmake -S . -B build `
   -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
-cmake --build build --config Release
+cmake --build build --config Release --target deploy
 ctest --test-dir build -C Release --output-on-failure
+& .\build\Release\DailyReport.exe
 ```
+
+也可以直接双击仓库根目录的 `run.bat`。它会先编译最新代码、复制 Qt DLL 和插件，再启动 `build\Release\DailyReport.exe`。运行时不能只复制单个 EXE，需保留 `build\Release` 中的 DLL 与插件目录。
 
 ## 首次使用
 
 首次启动会打开配置向导：
 
 1. 添加需要监控的项目目录；
-2. 选择 OpenAI、Anthropic 或 Ollama；
+2. 选择 OpenAI、Anthropic、DeepSeek 或 Ollama；
 3. 配置模型、API 地址和报告语言；
 4. 设置日报、周报生成时间。
 
 设置保存在本机 SQLite。Windows API Key 使用 DPAPI 保护；Linux 当前仅进行本地编码存储，若机器是多人共享环境，请优先使用无密钥的本地 Ollama，或限制应用数据目录的访问权限。
 
 修改 LLM、报告时间和语言后会立即生效。监控目录和监控器开关在重启应用后生效。
+
+界面当前支持 English 和简体中文。在“设置 → 计划与语言”中修改“界面与报告语言”并保存后，主窗口、设置页、报告页、历史记录、活动时间线和系统托盘菜单会立即切换；同一选项也决定 AI 生成报告所使用的语言。
+
+Windows 下重新编译前，需要先从系统托盘退出正在运行的 DailyReport，否则链接器无法覆盖 `build\Release\DailyReport.exe`。`run.bat` 会检测这一情况并给出提示。
+
+## 没有 API Key 时生成日报
+
+进入“报告中心”，点击“复制 AI 提示词”可将当天整理后的提示词复制到剪贴板；点击“导出 AI 总结包”会生成一个 Markdown 文件。把文字粘贴到、或把文件上传到支持长文本的 AI 对话网站即可。总结包包含编辑文件名、项目上下文、Git/构建活动、技术网页和资料名称，不包含源码或文档正文。详见 [`docs/manual-ai-workflow.md`](docs/manual-ai-workflow.md)。
 
 ## 项目结构
 
@@ -86,7 +100,7 @@ src/
 ├── monitor/   文件、进程、窗口、输入、Git、构建监控
 ├── pipeline/  收集、过滤、分类和时间线组装
 ├── storage/   SQLite、迁移、事件/设置/报告仓库
-├── llm/       OpenAI、Anthropic、Ollama 后端
+├── llm/       OpenAI、Anthropic、DeepSeek、Ollama 后端
 ├── report/    模板、生成器、调度器、Markdown 渲染
 ├── ui/        主窗口、托盘、设置、历史和时间线
 └── util/      日志、JSON、凭据和平台工具
@@ -98,6 +112,8 @@ tests/         Qt Test 单元与集成测试
 - 活动数据只写入本机 SQLite，程序不会自行同步时间线。
 - 生成报告时，模板中整理后的时间线会发送给所选 LLM；使用 Ollama 时可保持全程本地。
 - 文件监控记录路径和变更类型，不读取或保存源文件正文。
+- 编辑器和资料监控只解析前台窗口中的文件、项目和文档名称，不读取源码、PDF 或 Office 正文。
+- 浏览器默认删除 URL 用户信息、查询参数和片段，只保留协议、域名与路径；可在设置中显式选择保留查询参数。
 - 默认排除 `.git`、`node_modules`、`build`、`target`、`dist` 等生成目录。
 
 日志和数据库位置由 Qt 的 `QStandardPaths::AppLocalDataLocation` 决定。
@@ -105,7 +121,9 @@ tests/         Qt Test 单元与集成测试
 ## 已知限制
 
 - Wayland 没有统一的全局前台窗口和空闲时间接口，目前这两项只支持 X11 辅助工具。
-- Linux 浏览器 URL 采集尚未实现；浏览器进程和窗口标题仍可被其他监控器记录。
+- Linux X11 当前可记录活动浏览器页面标题，但不能稳定取得完整 URL；Wayland 下需要后续浏览器扩展或桌面门户支持。
+- 当前记录的是编辑器窗口上下文与文件系统变更，无法知道某一行代码的语义；若需要函数级、任务级精度，后续应提供 VS Code/JetBrains 扩展，并由用户明确授权。
+- 当前不扫描浏览器的完整历史数据库，只记录程序运行期间的活动页面；完整历史导入应作为单独的显式授权功能。
 - 进程轮询无法可靠取得任意已结束进程的退出码，因此构建完成事件可能只有耗时而没有成功/失败状态。
 - 文件重命名在便携轮询实现中会表现为“删除 + 新建”。
 

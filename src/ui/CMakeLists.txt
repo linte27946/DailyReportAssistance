@@ -1,4 +1,5 @@
 add_library(dailyreport_ui STATIC
+    UiLanguage.cpp
     SystemTray.cpp
     MainWindow.cpp
     SettingsDialog.cpp
