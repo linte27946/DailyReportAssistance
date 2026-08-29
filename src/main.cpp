@@ -16,6 +16,7 @@
 #include "ui/SystemTray.h"
 #include "ui/SetupWizard.h"
 #include "ui/UiLanguage.h"
+#include "ui/AppIcon.h"
 #include "report/TemplateEngine.h"
 #include "report/ReportGenerator.h"
 #include "report/ReportScheduler.h"
@@ -27,6 +28,7 @@
 #include "storage/EventRepository.h"
 #include "storage/ReportRepository.h"
 #include "storage/SettingsRepository.h"
+#include "app/DataRetentionService.h"
 #include "monitor/MonitorEngine.h"
 #include "monitor/FileSystemMonitor.h"
 #include "monitor/ProcessMonitor.h"
@@ -111,6 +113,7 @@ int main(int argc, char *argv[])
     // Construct QApplication first so QStandardPaths and platform plugins are
     // initialized before logging and single-instance coordination use them.
     Application app(argc, argv);
+    app.setWindowIcon(AppIcon::create());
     UiLanguage::setLanguage(
         QLocale::system().language() == QLocale::Chinese ? "zh-CN" : "en");
     Log::init();
@@ -152,6 +155,8 @@ int main(int argc, char *argv[])
     auto *eventRepo = new EventRepository();
     auto *reportRepo = new ReportRepository();
     auto *settingsRepo = new SettingsRepository();
+    auto *retentionService = new DataRetentionService(
+        eventRepo, reportRepo, settingsRepo, &app);
 
     UiLanguage::setLanguage(settingsRepo->getValue("language", UiLanguage::language()));
 
@@ -244,7 +249,8 @@ int main(int argc, char *argv[])
 
     // UI
     auto *mainWindow = new MainWindow(
-        templateEngine, reportGenerator, eventRepo, reportRepo, settingsRepo);
+        templateEngine, reportGenerator, eventRepo, reportRepo, settingsRepo,
+        retentionService);
     auto *systemTray = new SystemTray(mainWindow, reportGenerator, reportScheduler, &app);
 
     // Wire tray ↔ window
@@ -262,6 +268,7 @@ int main(int argc, char *argv[])
                          configureScheduler(reportScheduler, settingsRepo);
                          reportGenerator->setReportLanguage(
                              settingsRepo->getValue("language", "zh-CN"));
+                         retentionService->reloadSettings();
                      });
     QObject::connect(&app, &QCoreApplication::aboutToQuit,
                      llmClient, &LlmClient::cancelActiveGeneration);
@@ -275,8 +282,7 @@ int main(int argc, char *argv[])
     if (settingsRepo->getBool("monitoring_enabled", true))
         monitorEngine->startAll();
 
-    eventRepo->pruneOlderThan(QDate::currentDate().addDays(
-        -settingsRepo->getInt("data_retention_days", 90)));
+    retentionService->start();
 
     // Show window on first run (setup wizard will guide user)
     if (firstRun || !settingsRepo->getBool("start_minimized", false)

@@ -173,6 +173,26 @@ public:
         return true;
     }
 
+    /// Delete reports whose covered date is older than the cutoff date.
+    int pruneOlderThan(const QDate &cutoff)
+    {
+        auto db = Database::instance().connection();
+        QSqlQuery query(db);
+        query.prepare("DELETE FROM reports WHERE report_date < :cutoff");
+        query.bindValue(":cutoff", cutoff.toString(Qt::ISODate));
+
+        if (!query.exec()) {
+            spdlog::error("Failed to prune reports: {}",
+                          query.lastError().text().toStdString());
+            return -1;
+        }
+
+        const int deleted = query.numRowsAffected();
+        spdlog::info("Pruned {} reports older than {}.", deleted,
+                     cutoff.toString(Qt::ISODate).toStdString());
+        return deleted;
+    }
+
     /// Get the total number of reports.
     int totalCount()
     {

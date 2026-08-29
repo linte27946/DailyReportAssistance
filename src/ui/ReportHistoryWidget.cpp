@@ -19,8 +19,11 @@ ReportHistoryWidget::ReportHistoryWidget(ReportRepository *reportRepo, QWidget *
 void ReportHistoryWidget::setupUi()
 {
     auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(22, 20, 22, 22);
+    layout->setSpacing(14);
 
     auto *filterLayout = new QHBoxLayout();
+    filterLayout->setSpacing(9);
     auto *filterLabel = new QLabel();
     UiLanguage::bindText(filterLabel, "Filter:", "筛选：");
     filterLayout->addWidget(filterLabel);
@@ -33,6 +36,10 @@ void ReportHistoryWidget::setupUi()
     UiLanguage::bindComboItem(m_typeFilter, 2, "Weekly", "周报");
     filterLayout->addWidget(m_typeFilter);
     filterLayout->addStretch();
+
+    m_countLabel = new QLabel();
+    m_countLabel->setObjectName("summaryBadge");
+    filterLayout->addWidget(m_countLabel);
 
     auto *refreshBtn = new QPushButton();
     UiLanguage::bindText(refreshBtn, "Refresh", "刷新");
@@ -54,11 +61,19 @@ void ReportHistoryWidget::setupUi()
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_table->setAlternatingRowColors(true);
+    m_table->setShowGrid(false);
     m_table->verticalHeader()->setVisible(false);
+    m_table->verticalHeader()->setDefaultSectionSize(40);
     m_table->setColumnWidth(0, 120);
     m_table->setColumnWidth(1, 80);
     m_table->setColumnWidth(2, 250);
     m_table->setColumnWidth(3, 100);
+    m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    m_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    m_table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    m_table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
 
     connect(m_table, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
         auto *item = m_table->item(row, 0);
@@ -95,4 +110,9 @@ void ReportHistoryWidget::refresh()
         m_table->setItem(row, 4, new QTableWidgetItem(r.createdAt.toString("yyyy-MM-dd HH:mm")));
         row++;
     }
+
+    UiLanguage::bindText(
+        m_countLabel,
+        row == 0 ? "No reports" : QString("%1 reports").arg(row),
+        row == 0 ? "暂无报告" : QString("%1 份报告").arg(row));
 }

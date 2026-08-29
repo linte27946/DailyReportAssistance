@@ -9,6 +9,7 @@
 #include "storage/EventRepository.h"
 #include "storage/ReportRepository.h"
 #include "storage/SettingsRepository.h"
+#include "app/DataRetentionService.h"
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -20,6 +21,7 @@
 #include <QApplication>
 #include <QSystemTrayIcon>
 #include <QMessageBox>
+#include <QStyle>
 #include <spdlog/spdlog.h>
 
 MainWindow::MainWindow(TemplateEngine *templateEngine,
@@ -27,11 +29,13 @@ MainWindow::MainWindow(TemplateEngine *templateEngine,
                        EventRepository *eventRepo,
                        ReportRepository *reportRepo,
                        SettingsRepository *settingsRepo,
+                       DataRetentionService *retentionService,
                        QWidget *parent)
     : QMainWindow(parent)
     , m_templateEngine(templateEngine)
     , m_reportGenerator(reportGenerator)
     , m_reportRepo(reportRepo)
+    , m_settingsRepo(settingsRepo)
 {
     setWindowTitle("DailyReport");
     setMinimumSize(980, 640);
@@ -40,7 +44,8 @@ MainWindow::MainWindow(TemplateEngine *templateEngine,
     // Create child widgets
     m_reportViewer = new ReportViewer(reportGenerator, reportRepo, this);
     m_historyWidget = new ReportHistoryWidget(reportRepo, this);
-    m_settingsDialog = new SettingsDialog(settingsRepo, templateEngine, this);
+    m_settingsDialog = new SettingsDialog(
+        settingsRepo, templateEngine, retentionService, this);
     m_timelineWidget = new TimelineWidget(eventRepo, this);
 
     connect(m_historyWidget, &ReportHistoryWidget::reportSelected,
@@ -52,6 +57,14 @@ MainWindow::MainWindow(TemplateEngine *templateEngine,
         m_timelineWidget->refresh();
         updatePageHeader(m_stack->currentIndex());
     });
+    if (retentionService) {
+        connect(retentionService, &DataRetentionService::cleanupFinished,
+                this, [this](int, int, const QDate &, const QDate &,
+                             const QDateTime &, bool) {
+            m_historyWidget->refresh();
+            m_timelineWidget->refresh();
+        });
+    }
 
     setupUi();
     createMenuBar();
@@ -74,14 +87,24 @@ void MainWindow::setupUi()
     sidebarLayout->setContentsMargins(18, 24, 18, 20);
     sidebarLayout->setSpacing(14);
 
+    auto *brandRow = new QHBoxLayout();
+    brandRow->setSpacing(10);
+    auto *brandIcon = new QLabel(sidebar);
+    brandIcon->setObjectName("brandIcon");
+    brandIcon->setPixmap(QApplication::windowIcon().pixmap(38, 38));
+    auto *brandText = new QVBoxLayout();
+    brandText->setSpacing(1);
     auto *brand = new QLabel("DailyReport", sidebar);
     brand->setObjectName("brandLabel");
     auto *tagline = new QLabel(sidebar);
     tagline->setObjectName("brandTagline");
     UiLanguage::bindText(tagline, "Activity to insight", "让工作轨迹变成日报");
-    sidebarLayout->addWidget(brand);
-    sidebarLayout->addWidget(tagline);
-    sidebarLayout->addSpacing(18);
+    brandText->addWidget(brand);
+    brandText->addWidget(tagline);
+    brandRow->addWidget(brandIcon);
+    brandRow->addLayout(brandText, 1);
+    sidebarLayout->addLayout(brandRow);
+    sidebarLayout->addSpacing(20);
 
     auto *navigationLabel = new QLabel(sidebar);
     navigationLabel->setObjectName("navigationLabel");
@@ -94,6 +117,14 @@ void MainWindow::setupUi()
     m_navigation->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_navigation->setSelectionMode(QAbstractItemView::SingleSelection);
     m_navigation->addItems({"", "", "", ""});
+    m_navigation->item(0)->setIcon(
+        style()->standardIcon(QStyle::SP_FileDialogContentsView));
+    m_navigation->item(1)->setIcon(
+        style()->standardIcon(QStyle::SP_FileDialogListView));
+    m_navigation->item(2)->setIcon(
+        style()->standardIcon(QStyle::SP_BrowserReload));
+    m_navigation->item(3)->setIcon(
+        style()->standardIcon(QStyle::SP_FileDialogDetailedView));
     UiLanguage::bindListItem(m_navigation, 0, "Reports", "报告中心");
     UiLanguage::bindListItem(m_navigation, 1, "History", "历史报告");
     UiLanguage::bindListItem(m_navigation, 2, "Activity timeline", "活动时间线");
@@ -135,11 +166,25 @@ void MainWindow::setupUi()
     headingLayout->addWidget(m_pageSubtitle);
     headerLayout->addLayout(headingLayout, 1);
 
+    auto *monitoringStatus = new QLabel(header);
+    monitoringStatus->setObjectName(
+        m_settingsRepo->getBool("monitoring_enabled", true)
+            ? "monitoringActive" : "monitoringPaused");
+    UiLanguage::bindText(
+        monitoringStatus,
+        m_settingsRepo->getBool("monitoring_enabled", true)
+            ? "● Local capture active" : "● Capture paused",
+        m_settingsRepo->getBool("monitoring_enabled", true)
+            ? "● 本机采集运行中" : "● 采集已暂停");
+    headerLayout->addWidget(monitoringStatus);
+
     auto *weeklyButton = new QPushButton(header);
     weeklyButton->setObjectName("secondaryButton");
+    weeklyButton->setIcon(style()->standardIcon(QStyle::SP_FileDialogListView));
     UiLanguage::bindText(weeklyButton, "Generate weekly", "生成周报");
     auto *dailyButton = new QPushButton(header);
     dailyButton->setObjectName("primaryButton");
+    dailyButton->setIcon(style()->standardIcon(QStyle::SP_DialogApplyButton));
     UiLanguage::bindText(dailyButton, "Generate daily", "生成日报");
     headerLayout->addWidget(weeklyButton);
     headerLayout->addWidget(dailyButton);
@@ -171,8 +216,9 @@ void MainWindow::setupUi()
 
     setStyleSheet(R"(
         QMainWindow, QWidget#mainArea {
-            background: #f4f6f9;
+            background: #f3f5f9;
             color: #172033;
+            font-size: 13px;
         }
         QMenuBar {
             background: #182235;
@@ -182,8 +228,9 @@ void MainWindow::setupUi()
         QMenuBar::item:selected { background: #2b3850; }
         QMenu { background: #ffffff; color: #172033; border: 1px solid #dce2ec; }
         QMenu::item:selected { background: #e9f0ff; }
-        QFrame#sidebar { background: #182235; }
-        QLabel#brandLabel { color: #ffffff; font-size: 22px; font-weight: 600; }
+        QFrame#sidebar { background: #162238; }
+        QLabel#brandIcon { background: transparent; }
+        QLabel#brandLabel { color: #ffffff; font-size: 20px; font-weight: 700; }
         QLabel#brandTagline { color: #91a1bb; font-size: 12px; }
         QLabel#navigationLabel { color: #70819d; font-size: 10px; font-weight: 600; }
         QListWidget#navigation {
@@ -208,6 +255,14 @@ void MainWindow::setupUi()
         }
         QLabel#pageTitle { color: #172033; font-size: 24px; font-weight: 600; }
         QLabel#pageSubtitle { color: #69758a; font-size: 12px; }
+        QLabel#monitoringActive, QLabel#monitoringPaused {
+            border-radius: 14px;
+            padding: 6px 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        QLabel#monitoringActive { color: #147653; background: #e5f7f0; }
+        QLabel#monitoringPaused { color: #9b5a15; background: #fff3df; }
         QPushButton {
             min-height: 36px;
             padding: 0 16px;
@@ -217,6 +272,8 @@ void MainWindow::setupUi()
             color: #263248;
         }
         QPushButton:hover { border-color: #9daac0; background: #f8faff; }
+        QPushButton:focus { border: 2px solid #8eacf4; }
+        QPushButton:disabled { color: #9aa4b4; background: #eef1f5; }
         QPushButton#primaryButton {
             background: #356ae6;
             border-color: #356ae6;
@@ -224,6 +281,12 @@ void MainWindow::setupUi()
             font-weight: 600;
         }
         QPushButton#primaryButton:hover { background: #2859cf; }
+        QPushButton#dangerButton {
+            color: #b43b45;
+            background: #fff8f8;
+            border-color: #efcbd0;
+        }
+        QPushButton#dangerButton:hover { background: #fff0f1; border-color: #dd9ca4; }
         QStackedWidget#contentStack {
             background: #ffffff;
             border: 1px solid #e0e5ed;
@@ -250,16 +313,82 @@ void MainWindow::setupUi()
             padding: 16px;
             selection-background-color: #bfd2ff;
         }
-        QLineEdit, QComboBox, QSpinBox, QTimeEdit, QTextEdit {
+        QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QTimeEdit, QDateEdit, QTextEdit {
             min-height: 32px;
             border: 1px solid #d4dbe7;
             border-radius: 6px;
             background: #ffffff;
             padding: 0 8px;
         }
-        QTabWidget::pane { border: 1px solid #e0e5ed; border-radius: 8px; }
-        QTabBar::tab { padding: 8px 14px; color: #5e6a7f; }
-        QTabBar::tab:selected { color: #2859cf; font-weight: 600; }
+        QLineEdit:focus, QComboBox:focus, QSpinBox:focus,
+        QDoubleSpinBox:focus, QTimeEdit:focus, QDateEdit:focus, QTextEdit:focus {
+            border: 2px solid #83a5f6;
+        }
+        QTabWidget::pane {
+            border: 1px solid #e0e5ed;
+            border-radius: 10px;
+            background: #ffffff;
+            top: -1px;
+        }
+        QTabBar::tab {
+            padding: 10px 14px;
+            color: #667287;
+            background: transparent;
+            border-bottom: 2px solid transparent;
+        }
+        QTabBar::tab:hover { color: #2859cf; background: #f4f7fd; }
+        QTabBar::tab:selected {
+            color: #2859cf;
+            font-weight: 600;
+            border-bottom-color: #356ae6;
+        }
+        QGroupBox {
+            color: #27344b;
+            background: #fbfcfe;
+            border: 1px solid #e2e7ef;
+            border-radius: 9px;
+            margin-top: 13px;
+            padding: 14px 12px 10px 12px;
+            font-weight: 600;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 12px;
+            padding: 0 5px;
+            background: #ffffff;
+        }
+        QLabel#settingsHint {
+            color: #526179;
+            background: #edf3ff;
+            border: 1px solid #d6e3ff;
+            border-radius: 8px;
+            padding: 11px 13px;
+        }
+        QLabel#fieldHint { color: #7a8699; font-size: 11px; font-weight: 400; }
+        QLabel#cleanupStatus {
+            color: #526179;
+            background: #f2f5f9;
+            border-radius: 7px;
+            padding: 9px 11px;
+            font-weight: 400;
+        }
+        QLabel#summaryBadge {
+            color: #526179;
+            background: #eef2f8;
+            border-radius: 13px;
+            padding: 5px 10px;
+            font-size: 11px;
+        }
+        QTableWidget {
+            background: #ffffff;
+            alternate-background-color: #f8faff;
+            border: 1px solid #e1e6ee;
+            border-radius: 8px;
+            gridline-color: #edf0f5;
+            selection-background-color: #dce8ff;
+            selection-color: #20304d;
+        }
+        QTableWidget::item { padding: 7px; }
         QHeaderView::section {
             background: #f5f7fa;
             color: #4c586c;
@@ -267,6 +396,10 @@ void MainWindow::setupUi()
             border-bottom: 1px solid #dfe5ee;
             padding: 8px;
         }
+        QScrollBar:vertical { width: 10px; background: transparent; margin: 2px; }
+        QScrollBar::handle:vertical { background: #c3ccda; border-radius: 5px; min-height: 28px; }
+        QScrollBar::handle:vertical:hover { background: #a9b5c6; }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
     )");
 }
 
@@ -278,10 +411,12 @@ void MainWindow::createMenuBar()
         m_reportViewer->generateReport("daily");
     });
     UiLanguage::bindText(dailyAction, "Generate Daily Report", "生成日报");
+    dailyAction->setIcon(style()->standardIcon(QStyle::SP_DialogApplyButton));
     QAction *weeklyAction = fileMenu->addAction("", this, [this]() {
         m_reportViewer->generateReport("weekly");
     });
     UiLanguage::bindText(weeklyAction, "Generate Weekly Report", "生成周报");
+    weeklyAction->setIcon(style()->standardIcon(QStyle::SP_FileDialogListView));
     fileMenu->addSeparator();
     QAction *exitAction = fileMenu->addAction("", this, []() { QApplication::quit(); });
     UiLanguage::bindText(exitAction, "E&xit", "退出(&X)");
@@ -306,10 +441,10 @@ void MainWindow::createMenuBar()
             UiLanguage::text(
                 "DailyReport v1.0.0\n\n"
                 "Automatic developer activity tracking and report generation.\n"
-                "Supports OpenAI, Anthropic, and local LLMs.",
+                "Supports OpenAI, DeepSeek, Anthropic, and local LLMs.",
                 "DailyReport v1.0.0\n\n"
                 "自动记录开发活动并生成日报或周报。\n"
-                "支持 OpenAI、Anthropic 和本地大模型。"));
+                "支持 OpenAI、DeepSeek、Anthropic 和本地大模型。"));
     });
     UiLanguage::bindText(aboutAction, "About DailyReport", "关于 DailyReport");
 }

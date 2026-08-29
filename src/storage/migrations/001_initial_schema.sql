@@ -82,6 +82,8 @@ INSERT OR IGNORE INTO app_settings (key, value) VALUES
     ('start_minimized', 'true'),
     ('afk_threshold_secs', '300'),
     ('data_retention_days', '90'),
+    ('activity_retention_months', '3'),
+    ('report_retention_months', '3'),
     ('monitoring_enabled', 'true'),
     ('git_tracking_enabled', 'true'),
     ('browser_tracking_enabled', 'true'),

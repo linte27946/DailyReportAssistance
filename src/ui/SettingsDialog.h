@@ -12,6 +12,8 @@
 
 class SettingsRepository;
 class TemplateEngine;
+class DataRetentionService;
+class QLabel;
 
 /// Settings dialog with tabs for General, Monitoring, LLM, and Reports.
 class SettingsDialog : public QWidget {
@@ -20,6 +22,7 @@ class SettingsDialog : public QWidget {
 public:
     explicit SettingsDialog(SettingsRepository *settings,
                             TemplateEngine *templateEngine,
+                            DataRetentionService *retentionService,
                             QWidget *parent = nullptr);
 
     void loadSettings();
@@ -30,12 +33,17 @@ signals:
 
 private:
     void setupUi();
+    void saveRetentionSettings();
 
     // General tab widgets
     QCheckBox *m_autoStartChk = nullptr;
     QCheckBox *m_startMinimizedChk = nullptr;
     QSpinBox *m_afkThresholdSpin = nullptr;
-    QSpinBox *m_dataRetentionSpin = nullptr;
+
+    // Data retention tab widgets
+    QSpinBox *m_activityRetentionSpin = nullptr;
+    QSpinBox *m_reportRetentionSpin = nullptr;
+    QLabel *m_cleanupStatusLabel = nullptr;
 
     // Monitoring tab widgets
     QListWidget *m_projectPathsList = nullptr;
@@ -65,4 +73,5 @@ private:
 
     SettingsRepository *m_settings = nullptr;
     TemplateEngine *m_templateEngine = nullptr;
+    DataRetentionService *m_retentionService = nullptr;
 };

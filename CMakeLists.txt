@@ -93,6 +93,10 @@ install(TARGETS DailyReport RUNTIME DESTINATION bin)
 install(DIRECTORY src/storage/migrations/
         DESTINATION share/dailyreport/migrations
         FILES_MATCHING PATTERN "*.sql")
+install(FILES src/ui/resources/icons/dailyreport.svg
+        DESTINATION share/icons/hicolor/scalable/apps)
+install(FILES packaging/dailyreport.desktop
+        DESTINATION share/applications)
 
 # ── Tests ───────────────────────────────────────────
 option(BUILD_TESTS "Build unit tests" ON)

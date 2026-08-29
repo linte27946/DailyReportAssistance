@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/">
+        <file>icons/dailyreport.svg</file>
         <file>templates/daily_report.md</file>
         <file>templates/weekly_report.md</file>
     </qresource>

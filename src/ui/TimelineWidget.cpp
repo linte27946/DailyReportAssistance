@@ -69,14 +69,25 @@ TimelineWidget::TimelineWidget(EventRepository *eventRepo, QWidget *parent)
 void TimelineWidget::setupUi()
 {
     auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(22, 20, 22, 22);
+    layout->setSpacing(14);
 
     auto *header = new QHBoxLayout();
+    header->setSpacing(9);
     auto *dateLabel = new QLabel();
     UiLanguage::bindText(dateLabel, "Date:", "日期：");
     header->addWidget(dateLabel);
     m_dateEdit = new QDateEdit(QDate::currentDate());
     m_dateEdit->setCalendarPopup(true);
     header->addWidget(m_dateEdit);
+
+    auto *todayBtn = new QPushButton();
+    UiLanguage::bindText(todayBtn, "Today", "今天");
+    connect(todayBtn, &QPushButton::clicked, this, [this]() {
+        m_dateEdit->setDate(QDate::currentDate());
+        refresh();
+    });
+    header->addWidget(todayBtn);
 
     auto *refreshBtn = new QPushButton();
     UiLanguage::bindText(refreshBtn, "Refresh", "刷新");
@@ -85,6 +96,7 @@ void TimelineWidget::setupUi()
     header->addStretch();
 
     m_totalLabel = new QLabel();
+    m_totalLabel->setObjectName("summaryBadge");
     header->addWidget(m_totalLabel);
     layout->addLayout(header);
 
@@ -98,12 +110,21 @@ void TimelineWidget::setupUi()
     UiLanguage::bindHeader(m_table, 4, "Application", "应用程序");
     m_table->horizontalHeader()->setStretchLastSection(true);
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_table->setAlternatingRowColors(true);
+    m_table->setShowGrid(false);
     m_table->verticalHeader()->setVisible(false);
+    m_table->verticalHeader()->setDefaultSectionSize(38);
     m_table->setColumnWidth(0, 100);
     m_table->setColumnWidth(1, 100);
     m_table->setColumnWidth(2, 120);
     m_table->setColumnWidth(3, 280);
+    m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    m_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    m_table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    m_table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
 
     layout->addWidget(m_table);
 }

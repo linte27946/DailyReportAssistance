@@ -14,6 +14,7 @@ class ReportGenerator;
 class EventRepository;
 class ReportRepository;
 class SettingsRepository;
+class DataRetentionService;
 
 /// Main application window with stacked views for reports, settings, and timeline.
 class MainWindow : public QMainWindow {
@@ -25,6 +26,7 @@ public:
                         EventRepository *eventRepo,
                         ReportRepository *reportRepo,
                         SettingsRepository *settingsRepo,
+                        DataRetentionService *retentionService,
                         QWidget *parent = nullptr);
 
     /// Switch to the report viewer tab.
@@ -64,4 +66,5 @@ private:
     TemplateEngine *m_templateEngine = nullptr;
     ReportGenerator *m_reportGenerator = nullptr;
     ReportRepository *m_reportRepo = nullptr;
+    SettingsRepository *m_settingsRepo = nullptr;
 };

@@ -3,6 +3,8 @@
 #include "storage/Database.h"
 #include "storage/EventRepository.h"
 #include "storage/SettingsRepository.h"
+#include "storage/ReportRepository.h"
+#include "app/DataRetentionService.h"
 #include "core/Event.h"
 
 class TestDatabase : public QObject {
@@ -39,6 +41,13 @@ private slots:
         QVERIFY(!settings.getBool("nonexistent"));
     }
 
+    void testRetentionDefaults()
+    {
+        SettingsRepository settings;
+        QCOMPARE(settings.getInt("activity_retention_months"), 3);
+        QCOMPARE(settings.getInt("report_retention_months"), 3);
+    }
+
     void testEventInsertAndQuery()
     {
         EventRepository repo;
@@ -69,6 +78,56 @@ private slots:
         EventRepository repo;
         int deleted = repo.pruneOlderThan(QDate::currentDate().addDays(365));
         QVERIFY(deleted >= 0); // Should not crash
+    }
+
+    void testRetentionServiceCleansBothStores()
+    {
+        SettingsRepository settings;
+        settings.setInt("activity_retention_months", 3);
+        settings.setInt("report_retention_months", 3);
+
+        EventRepository events;
+        ActivityEvent oldEvent;
+        oldEvent.timestamp = QDateTime(
+            QDate::currentDate().addMonths(-6), QTime(12, 0), Qt::UTC);
+        oldEvent.type = EventType::FileModified;
+        oldEvent.category = EventCategory::Coding;
+        oldEvent.description = "Expired event";
+        QVERIFY(events.insertBatch({oldEvent}));
+
+        ReportRepository reports;
+        const QDate oldDate = QDate::currentDate().addMonths(-6).addDays(-1);
+        QVERIFY(reports.saveReport("weekly", oldDate, "Expired report", "old",
+                                   "test", "test") > 0);
+
+        DataRetentionService service(&events, &reports, &settings);
+        QSignalSpy cleanupSpy(&service, &DataRetentionService::cleanupFinished);
+        service.runCleanupNow();
+
+        QCOMPARE(cleanupSpy.count(), 1);
+        const auto arguments = cleanupSpy.takeFirst();
+        QVERIFY(arguments.at(0).toInt() >= 1);
+        QVERIFY(arguments.at(1).toInt() >= 1);
+        QCOMPARE(arguments.at(5).toBool(), true);
+        QVERIFY(!reports.reportExists(oldDate, "weekly"));
+    }
+
+    void testReportPruning()
+    {
+        ReportRepository repo;
+        const QDate oldDate = QDate::currentDate().addMonths(-6);
+        const QDate recentDate = QDate::currentDate().addMonths(-1);
+
+        QVERIFY(repo.saveReport("daily", oldDate, "Old report", "old",
+                                "test", "test") > 0);
+        QVERIFY(repo.saveReport("daily", recentDate, "Recent report", "recent",
+                                "test", "test") > 0);
+
+        const int deleted = repo.pruneOlderThan(
+            QDate::currentDate().addMonths(-3));
+        QCOMPARE(deleted, 1);
+        QVERIFY(!repo.reportExists(oldDate, "daily"));
+        QVERIFY(repo.reportExists(recentDate, "daily"));
     }
 
 private:

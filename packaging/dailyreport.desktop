@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=DailyReport
+Comment=Automatic developer activity tracking and work report generation
+Comment[zh_CN]=自动记录开发活动并生成日报和周报
+Exec=DailyReport
+Icon=dailyreport
+Terminal=false
+Categories=Development;Office;Utility;
+StartupNotify=true

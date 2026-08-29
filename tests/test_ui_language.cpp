@@ -3,11 +3,21 @@
 #include <QLabel>
 
 #include "ui/UiLanguage.h"
+#include "ui/AppIcon.h"
 
 class TestUiLanguage : public QObject {
     Q_OBJECT
 
 private slots:
+    void createsApplicationIconAtCommonSizes()
+    {
+        const QIcon icon = AppIcon::create();
+        QVERIFY(!icon.isNull());
+        QVERIFY(!icon.pixmap(16, 16).isNull());
+        QVERIFY(!icon.pixmap(64, 64).isNull());
+        QVERIFY(!icon.pixmap(256, 256).isNull());
+    }
+
     void selectsRequestedLanguage()
     {
         UiLanguage::setLanguage("en");

@@ -5,6 +5,7 @@
 #include <QComboBox>
 
 class ReportRepository;
+class QLabel;
 
 /// Displays a list of previously generated reports with filtering.
 class ReportHistoryWidget : public QWidget {
@@ -24,4 +25,5 @@ private:
     ReportRepository *m_reportRepo = nullptr;
     QTableWidget *m_table = nullptr;
     QComboBox *m_typeFilter = nullptr;
+    QLabel *m_countLabel = nullptr;
 };
