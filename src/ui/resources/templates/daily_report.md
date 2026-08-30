@@ -8,6 +8,8 @@ Group related activities together. Mention specific files worked on and any nota
 **Total Active Time:** {{active_hours}} hours
 **Idle Time:** {{idle_hours}} hours
 
+The totals above are de-duplicated wall-clock measurements. Individual event durations may overlap and must not be added together.
+
 ## Activity Summary
 
 {{category_breakdown}}
@@ -37,6 +39,12 @@ Group related activities together. Mention specific files worked on and any nota
 
 ## Browser Pages
 {{web_pages}}
+
+## Meetings
+{{meeting_context}}
+
+## Personal / Entertainment Activity
+{{distraction_context}}
 
 ## Activity Timeline
 {{timeline_table}}

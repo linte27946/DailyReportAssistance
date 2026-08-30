@@ -1,9 +1,12 @@
 #include <QtTest>
 #include <QComboBox>
 #include <QLabel>
+#include <QPushButton>
+#include <QFrame>
 
 #include "ui/UiLanguage.h"
 #include "ui/AppIcon.h"
+#include "ui/ReportDeleteDialog.h"
 
 class TestUiLanguage : public QObject {
     Q_OBJECT
@@ -50,6 +53,30 @@ private slots:
         QCOMPARE(label.text(), QString("报告中心"));
         QCOMPARE(combo.itemText(1), QString("简体中文"));
         QCOMPARE(combo.currentData().toString(), QString("zh-CN"));
+    }
+
+    void reportDeleteDialogUsesSafeCustomLayout()
+    {
+        ReportDeleteDialog dialog("Daily Report - 2026-08-29", "daily",
+                                  QDate(2026, 8, 29));
+        QCOMPARE(dialog.objectName(), QString("deleteReportDialog"));
+        auto *cancel = dialog.findChild<QPushButton *>(
+            "deleteReportCancelButton");
+        auto *confirm = dialog.findChild<QPushButton *>(
+            "deleteReportConfirmButton");
+        QVERIFY(cancel);
+        QVERIFY(confirm);
+        QVERIFY(cancel->isDefault());
+        QCOMPARE(dialog.focusWidget(), cancel);
+        QVERIFY(!dialog.findChildren<QFrame *>("deleteReportCard").isEmpty());
+
+        const QString snapshotPath = qEnvironmentVariable(
+            "DAILYREPORT_DELETE_DIALOG_SNAPSHOT");
+        if (!snapshotPath.isEmpty()) {
+            dialog.show();
+            QCoreApplication::processEvents();
+            QVERIFY(dialog.grab().save(snapshotPath));
+        }
     }
 };
 

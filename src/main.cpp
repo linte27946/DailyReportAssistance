@@ -1,5 +1,4 @@
 #include <QApplication>
-#include <QMessageBox>
 #include <QTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -17,6 +16,7 @@
 #include "ui/SetupWizard.h"
 #include "ui/UiLanguage.h"
 #include "ui/AppIcon.h"
+#include "ui/DialogUtils.h"
 #include "report/TemplateEngine.h"
 #include "report/ReportGenerator.h"
 #include "report/ReportScheduler.h"
@@ -36,6 +36,7 @@
 #include "monitor/WorkContextMonitor.h"
 #include "monitor/InputActivityMonitor.h"
 #include "monitor/BrowserUrlMonitor.h"
+#include "monitor/WeComMeetingMonitor.h"
 #include "monitor/GitMonitor.h"
 #include "monitor/BuildMonitor.h"
 #include "pipeline/EventPipeline.h"
@@ -138,7 +139,7 @@ int main(int argc, char *argv[])
     // Initialize application services
     if (!app.initialize()) {
         spdlog::critical("Failed to initialize application services.");
-        QMessageBox::critical(
+        DialogUtils::critical(
             nullptr, "DailyReport",
             UiLanguage::text(
                 "Failed to initialize application services.\n"
@@ -219,10 +220,24 @@ int main(int argc, char *argv[])
     inputMonitor->setAfkThreshold(settingsRepo->getInt("afk_threshold_secs", 300));
     monitorEngine->registerMonitor(std::move(inputMonitor));
 
+    auto weComMeetingMonitor = std::make_unique<WeComMeetingMonitor>();
+    WeComMeetingMonitor *weComMeetingMonitorPtr = weComMeetingMonitor.get();
+    weComMeetingMonitor->setCliPath(
+        settingsRepo->getValue("wecom_cli_path", "wecom-cli"));
+    weComMeetingMonitor->setSyncIntervalMinutes(
+        settingsRepo->getInt("wecom_meeting_sync_minutes", 30));
+    weComMeetingMonitor->setIdleThresholdPercent(
+        settingsRepo->getInt("wecom_meeting_idle_threshold_percent", 30));
+    weComMeetingMonitor->setEnabled(
+        settingsRepo->getBool("wecom_meeting_enabled", false));
+    monitorEngine->registerMonitor(std::move(weComMeetingMonitor));
+
     if (settingsRepo->getBool("browser_tracking_enabled", true)) {
         auto browserMonitor = std::make_unique<BrowserUrlMonitor>();
         browserMonitor->setCaptureFullUrl(
             settingsRepo->getBool("browser_capture_full_url", false));
+        browserMonitor->setTrackDistractions(
+            settingsRepo->getBool("distraction_tracking_enabled", false));
         monitorEngine->registerMonitor(std::move(browserMonitor));
     }
 
@@ -250,7 +265,7 @@ int main(int argc, char *argv[])
     // UI
     auto *mainWindow = new MainWindow(
         templateEngine, reportGenerator, eventRepo, reportRepo, settingsRepo,
-        retentionService);
+        retentionService, weComMeetingMonitorPtr);
     auto *systemTray = new SystemTray(mainWindow, reportGenerator, reportScheduler, &app);
 
     // Wire tray ↔ window
@@ -279,6 +294,12 @@ int main(int argc, char *argv[])
     }
 
     pipeline->start();
+    RawEvent sessionStarted;
+    sessionStarted.timestamp = QDateTime::currentDateTimeUtc();
+    sessionStarted.type = EventType::SessionStarted;
+    sessionStarted.source = "Application";
+    sessionStarted.description = "DailyReport monitoring session started";
+    pipeline->onRawEvent(sessionStarted);
     if (settingsRepo->getBool("monitoring_enabled", true))
         monitorEngine->startAll();
 
@@ -296,6 +317,12 @@ int main(int argc, char *argv[])
     // Cleanup
     reportGenerator->waitForFinished();
     monitorEngine->stopAll();
+    RawEvent sessionEnded;
+    sessionEnded.timestamp = QDateTime::currentDateTimeUtc();
+    sessionEnded.type = EventType::SessionEnded;
+    sessionEnded.source = "Application";
+    sessionEnded.description = "DailyReport monitoring session ended";
+    pipeline->onRawEvent(sessionEnded);
     pipeline->stop();
 
     return result;

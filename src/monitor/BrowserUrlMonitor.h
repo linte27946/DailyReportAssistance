@@ -34,7 +34,12 @@ public:
     /// contain search terms, tokens, document IDs, and other private data.
     void setCaptureFullUrl(bool enabled) { m_captureFullUrl = enabled; }
 
+    /// Record and label recognized live-streaming, gaming, and entertainment
+    /// pages. Disabled by default because this is personal activity data.
+    void setTrackDistractions(bool enabled) { m_trackDistractions = enabled; }
+
     static QString sanitizeUrl(const QString &url, bool includeQuery = false);
+    static QString distractionKind(const QString &url, const QString &pageTitle);
 
 private:
     void pollBrowserUrl();
@@ -62,6 +67,7 @@ private:
     QMutex m_mutex;
     int m_pollIntervalMs = 3000;
     bool m_captureFullUrl = false;
+    bool m_trackDistractions = false;
 
     // Known browser process names
     static const QSet<QString> &browserProcesses();

@@ -51,6 +51,8 @@ private slots:
         QVERIFY(!daily.isEmpty());
         QVERIFY(daily.contains("{{date}}"));
         QVERIFY(daily.contains("{{active_hours}}"));
+        QVERIFY(daily.contains("{{distraction_context}}"));
+        QVERIFY(daily.contains("de-duplicated wall-clock"));
 
         QString weekly = engine.templateContent("weekly_report");
         QVERIFY(!weekly.isEmpty());
@@ -113,6 +115,29 @@ private slots:
         QVERIFY(context["web_pages"].contains("developer.mozilla.org"));
         QVERIFY(context["documents_viewed"].contains("frontend-architecture.pdf"));
         QVERIFY(context["research_context"].contains("CSS grid guide"));
+    }
+
+    void testEntertainmentContextIsSeparateFromResearch()
+    {
+        ActivitySummary summary;
+        summary.date = QDate(2026, 8, 30);
+        Timeline timeline;
+
+        ActivityEvent page;
+        page.timestamp = QDateTime(summary.date, QTime(10, 30), Qt::UTC);
+        page.type = EventType::UrlVisited;
+        page.category = EventCategory::Distraction;
+        page.description = "Entertainment page: 游戏直播 (live.bilibili.com)";
+        page.metadata["pageTitle"] = "游戏直播";
+        page.metadata["domain"] = "live.bilibili.com";
+        timeline.addEvent(page);
+
+        const auto context = TemplateEngine::buildReportContext(
+            summary, timeline, summary.date);
+        QVERIFY(context["distraction_context"].contains("游戏直播"));
+        QVERIFY(!context["research_context"].contains("游戏直播"));
+        QVERIFY(!context["development_context"].contains("游戏直播"));
+        QVERIFY(!context["web_pages"].contains("游戏直播"));
     }
 };
 

@@ -112,24 +112,204 @@ private slots:
     void testTimelineSummary()
     {
         Timeline timeline;
-        QDate today = QDate::currentDate();
+        const QDate today = QDate::currentDate().addDays(-1);
+        const QDateTime start = QDateTime(
+            today, QTime(9, 0), Qt::LocalTime).toUTC();
+        const QDateTime end = start.addSecs(3600);
 
-        ActivityEvent e1;
-        e1.timestamp = QDateTime(today, QTime(9, 0, 0), Qt::UTC);
-        e1.category = EventCategory::Coding;
-        e1.durationSecs = 3600; // 1 hour
-        timeline.addEvent(e1);
+        ActivityEvent sessionStart;
+        sessionStart.timestamp = start;
+        sessionStart.type = EventType::SessionStarted;
+        sessionStart.sessionId = "work-session";
+        timeline.addEvent(sessionStart);
 
-        ActivityEvent e2;
-        e2.timestamp = QDateTime(today, QTime(10, 0, 0), Qt::UTC);
-        e2.type = EventType::GitCommit;
-        e2.category = EventCategory::VersionControl;
-        e2.durationSecs = 300;
-        timeline.addEvent(e2);
+        ActivityEvent active = sessionStart;
+        active.type = EventType::UserActive;
+        timeline.addEvent(active);
+
+        ActivityEvent focus = sessionStart;
+        focus.type = EventType::WindowFocusChanged;
+        focus.category = EventCategory::Coding;
+        timeline.addEvent(focus);
+
+        ActivityEvent commit = sessionStart;
+        commit.timestamp = start.addSecs(1800);
+        commit.type = EventType::GitCommit;
+        commit.category = EventCategory::VersionControl;
+        commit.durationSecs = 300;
+        timeline.addEvent(commit);
+
+        // Parallel processes all ran during the same real hour. Their summed
+        // runtime must not inflate the wall-clock active time.
+        for (int i = 0; i < 13; ++i) {
+            ActivityEvent process = sessionStart;
+            process.timestamp = end.addSecs(-i);
+            process.type = EventType::ProcessEnded;
+            process.category = EventCategory::Other;
+            process.durationSecs = 3600;
+            timeline.addEvent(process);
+        }
+
+        ActivityEvent sessionEnd = sessionStart;
+        sessionEnd.timestamp = end;
+        sessionEnd.type = EventType::SessionEnded;
+        timeline.addEvent(sessionEnd);
 
         ActivitySummary summary = timeline.computeSummary(today);
-        QCOMPARE(summary.totalActiveSecs, 3900);
+        QCOMPARE(summary.totalActiveSecs, 3600);
+        QCOMPARE(summary.categoryDurationSecs.value(EventCategory::Coding), 3600);
         QCOMPARE(summary.gitCommitCount, 1);
+    }
+
+    void testTimelineSummarySubtractsIdleIntervals()
+    {
+        Timeline timeline;
+        const QDate today = QDate::currentDate().addDays(-1);
+        const QDateTime start = QDateTime(
+            today, QTime(9, 0), Qt::LocalTime).toUTC();
+
+        auto add = [&](EventType type, int offsetSecs) -> ActivityEvent & {
+            ActivityEvent event;
+            event.timestamp = start.addSecs(offsetSecs);
+            event.type = type;
+            event.sessionId = "idle-session";
+            timeline.addEvent(event);
+            return timeline.events().last();
+        };
+
+        add(EventType::SessionStarted, 0);
+        add(EventType::UserActive, 0);
+        ActivityEvent &focus = add(EventType::WindowFocusChanged, 0);
+        focus.category = EventCategory::Coding;
+
+        ActivityEvent &idle = add(EventType::UserIdle, 25 * 60);
+        idle.metadata["idleStartTime"] = start.addSecs(20 * 60)
+            .toString(Qt::ISODateWithMs);
+        ActivityEvent &resumed = add(EventType::UserActive, 30 * 60);
+        resumed.metadata["idleStartTime"] = start.addSecs(20 * 60)
+            .toString(Qt::ISODateWithMs);
+        add(EventType::SessionEnded, 60 * 60);
+
+        const ActivitySummary summary = timeline.computeSummary(today);
+        QCOMPARE(summary.totalActiveSecs, 50 * 60);
+        QCOMPARE(summary.totalIdleSecs, 10 * 60);
+        QCOMPARE(summary.categoryDurationSecs.value(EventCategory::Coding), 50 * 60);
+    }
+
+    void testBrowserPageCategorySplitsForegroundTime()
+    {
+        Timeline timeline;
+        const QDate date = QDate::currentDate().addDays(-1);
+        const QDateTime start = QDateTime(
+            date, QTime(9, 0), Qt::LocalTime).toUTC();
+
+        auto add = [&](EventType type, int offsetSecs,
+                       EventCategory category = EventCategory::Other) {
+            ActivityEvent event;
+            event.timestamp = start.addSecs(offsetSecs);
+            event.type = type;
+            event.category = category;
+            event.sessionId = "browser-session";
+            timeline.addEvent(event);
+        };
+
+        add(EventType::SessionStarted, 0);
+        add(EventType::UserActive, 0);
+        add(EventType::WindowFocusChanged, 0, EventCategory::Browsing);
+        add(EventType::UrlVisited, 15 * 60, EventCategory::Distraction);
+        add(EventType::WindowFocusChanged, 45 * 60, EventCategory::Coding);
+        add(EventType::SessionEnded, 60 * 60);
+
+        const ActivitySummary summary = timeline.computeSummary(date);
+        QCOMPARE(summary.totalActiveSecs, 60 * 60);
+        QCOMPARE(summary.categoryDurationSecs.value(EventCategory::Browsing),
+                 15 * 60);
+        QCOMPARE(summary.categoryDurationSecs.value(EventCategory::Distraction),
+                 30 * 60);
+        QCOMPARE(summary.categoryDurationSecs.value(EventCategory::Coding),
+                 15 * 60);
+    }
+
+    void testMeetingFillsOnlyIdleWhenRatioIsGreaterThanThirtyPercent()
+    {
+        Timeline timeline;
+        const QDate date = QDate::currentDate().addDays(-1);
+        const QDateTime start = QDateTime(
+            date, QTime(9, 0), Qt::LocalTime).toUTC();
+
+        auto add = [&](EventType type, int offset,
+                       EventCategory category = EventCategory::Other) {
+            ActivityEvent event;
+            event.timestamp = start.addSecs(offset);
+            event.type = type;
+            event.category = category;
+            event.sessionId = "meeting-session";
+            timeline.addEvent(event);
+        };
+        add(EventType::SessionStarted, 0);
+        add(EventType::UserActive, 0);
+        add(EventType::WindowFocusChanged, 0, EventCategory::Coding);
+        add(EventType::UserIdle, 35 * 60, EventCategory::Idle);
+        add(EventType::SessionEnded, 60 * 60);
+
+        ActivityEvent meeting;
+        meeting.timestamp = start;
+        meeting.endTimestamp = start.addSecs(60 * 60);
+        meeting.durationSecs = 60 * 60;
+        meeting.type = EventType::MeetingAttended;
+        meeting.category = EventCategory::Meeting;
+        meeting.metadata["subject"] = "Architecture review";
+        meeting.metadata["idleThresholdPercent"] = 30;
+        timeline.addEvent(meeting);
+
+        const ActivitySummary summary = timeline.computeSummary(date);
+        QCOMPARE(summary.totalActiveSecs, 60 * 60);
+        QCOMPARE(summary.totalIdleSecs, 0);
+        QCOMPARE(summary.categoryDurationSecs.value(EventCategory::Coding),
+                 35 * 60);
+        QCOMPARE(summary.categoryDurationSecs.value(EventCategory::Meeting),
+                 25 * 60);
+        QCOMPARE(summary.meetingDurationSecs, 25 * 60);
+        QCOMPARE(summary.meetingCount, 1);
+    }
+
+    void testMeetingDoesNotApplyAtExactlyThirtyPercentIdle()
+    {
+        Timeline timeline;
+        const QDate date = QDate::currentDate().addDays(-1);
+        const QDateTime start = QDateTime(
+            date, QTime(10, 0), Qt::LocalTime).toUTC();
+
+        auto add = [&](EventType type, int offset,
+                       EventCategory category = EventCategory::Other) {
+            ActivityEvent event;
+            event.timestamp = start.addSecs(offset);
+            event.type = type;
+            event.category = category;
+            event.sessionId = "boundary-session";
+            timeline.addEvent(event);
+        };
+        add(EventType::SessionStarted, 0);
+        add(EventType::UserActive, 0);
+        add(EventType::WindowFocusChanged, 0, EventCategory::Coding);
+        add(EventType::UserIdle, 42 * 60, EventCategory::Idle);
+        add(EventType::SessionEnded, 60 * 60);
+
+        ActivityEvent meeting;
+        meeting.timestamp = start;
+        meeting.endTimestamp = start.addSecs(60 * 60);
+        meeting.type = EventType::MeetingAttended;
+        meeting.category = EventCategory::Meeting;
+        meeting.metadata["subject"] = "Scheduled review";
+        meeting.metadata["idleThresholdPercent"] = 30;
+        timeline.addEvent(meeting);
+
+        const ActivitySummary summary = timeline.computeSummary(date);
+        QCOMPARE(summary.totalActiveSecs, 42 * 60);
+        QCOMPARE(summary.totalIdleSecs, 18 * 60);
+        QCOMPARE(summary.meetingDurationSecs, 0);
+        QCOMPARE(summary.meetingCount, 0);
+        QCOMPARE(summary.categoryDurationSecs.value(EventCategory::Meeting), 0);
     }
 };
 

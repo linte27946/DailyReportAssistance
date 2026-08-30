@@ -56,6 +56,12 @@ add_executable(DailyReport
     ${RESOURCES_QRC}
 )
 
+if(WIN32)
+    # A Qt window icon only affects a running process. The native resource is
+    # required for Explorer, shortcuts and the executable itself.
+    target_sources(DailyReport PRIVATE packaging/windows/DailyReport.rc)
+endif()
+
 target_link_libraries(DailyReport PRIVATE
     dailyreport_app
     dailyreport_ui
@@ -183,6 +189,11 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${QT_ACTIVE_PLUGIN_DIR}/networkinformation/qnetworklistmanager$<$<CONFIG:Debug>:d>.dll"
             "$<TARGET_FILE_DIR:DailyReport>/networkinformation/"
+    )
+    add_custom_command(TARGET deploy POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/src/storage/migrations"
+            "$<TARGET_FILE_DIR:DailyReport>/migrations"
     )
     add_custom_command(TARGET deploy POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

@@ -31,9 +31,15 @@ bool InputActivityMonitor::start()
         return false;
     }
 #endif
-    m_isIdle = false;
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const int idleSecs = getIdleTimeSecs();
+    m_isIdle = idleSecs >= m_afkThresholdSecs;
+    if (m_isIdle)
+        m_idleStartTime = now.addSecs(-idleSecs);
+    m_lastStateEmissionDate = now.toLocalTime().date();
     m_checkTimer->start();
     setRunning(true);
+    emitStateSnapshot(now, "monitor started");
     return true;
 }
 
@@ -48,6 +54,9 @@ void InputActivityMonitor::stop()
         event.type = EventType::UserActive;
         event.source = "InputActivityMonitor";
         event.description = "User became active (monitor stopping)";
+        event.metadata["idleStartTime"] = m_idleStartTime.toString(Qt::ISODateWithMs);
+        event.metadata["idleDurationSecs"] = m_idleStartTime.secsTo(event.timestamp);
+        event.metadata["monitorStopping"] = true;
         emit rawEventCaptured(event);
     }
 
@@ -57,15 +66,20 @@ void InputActivityMonitor::stop()
 
 void InputActivityMonitor::checkActivity()
 {
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    const QDate localDate = now.toLocalTime().date();
+    const bool dateChanged = m_lastStateEmissionDate.isValid()
+        && localDate != m_lastStateEmissionDate;
     int idleSecs = getIdleTimeSecs();
+    bool stateChanged = false;
 
     if (!m_isIdle && idleSecs >= m_afkThresholdSecs) {
         // Transition to idle
         m_isIdle = true;
-        m_idleStartTime = QDateTime::currentDateTimeUtc().addSecs(-idleSecs);
+        m_idleStartTime = now.addSecs(-idleSecs);
 
         RawEvent event;
-        event.timestamp = QDateTime::currentDateTimeUtc();
+        event.timestamp = now;
         event.type = EventType::UserIdle;
         event.source = "InputActivityMonitor";
         event.description = QString("User idle (AFK for %1+ seconds)").arg(idleSecs);
@@ -74,13 +88,14 @@ void InputActivityMonitor::checkActivity()
 
         spdlog::debug("User became idle ({} secs)", idleSecs);
         emit rawEventCaptured(event);
+        stateChanged = true;
 
     } else if (m_isIdle && idleSecs < m_afkThresholdSecs) {
         // Transition back to active
         m_isIdle = false;
 
         RawEvent event;
-        event.timestamp = QDateTime::currentDateTimeUtc();
+        event.timestamp = now;
         event.type = EventType::UserActive;
         event.source = "InputActivityMonitor";
         event.description = "User became active";
@@ -92,7 +107,32 @@ void InputActivityMonitor::checkActivity()
 
         spdlog::debug("User became active (was idle for {} secs)", idleDuration);
         emit rawEventCaptured(event);
+        stateChanged = true;
     }
+
+    // Persist the current state just after local midnight. This gives each
+    // date an explicit boundary even when the app runs for days without an
+    // active/idle transition at midnight.
+    if (dateChanged && !stateChanged)
+        emitStateSnapshot(now, "date boundary");
+    m_lastStateEmissionDate = localDate;
+}
+
+void InputActivityMonitor::emitStateSnapshot(const QDateTime &timestamp,
+                                             const QString &reason)
+{
+    RawEvent event;
+    event.timestamp = timestamp;
+    event.type = m_isIdle ? EventType::UserIdle : EventType::UserActive;
+    event.source = "InputActivityMonitor";
+    event.description = m_isIdle
+        ? QString("User idle state snapshot (%1)").arg(reason)
+        : QString("User active state snapshot (%1)").arg(reason);
+    event.metadata["stateSnapshot"] = true;
+    event.metadata["reason"] = reason;
+    if (m_isIdle && m_idleStartTime.isValid())
+        event.metadata["idleStartTime"] = m_idleStartTime.toString(Qt::ISODateWithMs);
+    emit rawEventCaptured(event);
 }
 
 int InputActivityMonitor::getIdleTimeSecs()

@@ -1,14 +1,13 @@
 #include "ReportViewer.h"
 #include "UiLanguage.h"
+#include "DialogUtils.h"
 #include "report/MarkdownRenderer.h"
 #include "storage/ReportRepository.h"
 #include <QVBoxLayout>
 #include <QToolBar>
 #include <QLabel>
-#include <QFileDialog>
 #include <QApplication>
 #include <QClipboard>
-#include <QMessageBox>
 #include <QTextStream>
 #include <spdlog/spdlog.h>
 
@@ -37,7 +36,7 @@ void ReportViewer::setupUi()
     UiLanguage::bindText(markdownAction, "Export as Markdown", "导出为 Markdown");
     QAction *htmlAction = m_toolbar->addAction("", this, [this]() {
         QString html = MarkdownRenderer::toHtml(m_currentContent);
-        QString path = QFileDialog::getSaveFileName(
+        const QString path = DialogUtils::saveFile(
             this, UiLanguage::text("Save as HTML", "保存为 HTML"),
             "report.html", "HTML (*.html)");
         if (!path.isEmpty()) {
@@ -45,6 +44,10 @@ void ReportViewer::setupUi()
             if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
                 f.write(html.toUtf8());
                 f.close();
+            } else {
+                DialogUtils::warning(
+                    this, UiLanguage::text("Export failed", "导出失败"),
+                    UiLanguage::text("Could not write to file: ", "无法写入文件：") + path);
             }
         }
     });
@@ -94,7 +97,7 @@ void ReportViewer::copyExternalPrompt()
 void ReportViewer::exportExternalPrompt()
 {
     const QDate date = QDate::currentDate();
-    const QString path = QFileDialog::getSaveFileName(
+    const QString path = DialogUtils::saveFile(
         this,
         UiLanguage::text("Export AI summary package", "导出 AI 总结包"),
         QString("dailyreport_ai_package_%1.md").arg(date.toString(Qt::ISODate)),
@@ -103,7 +106,7 @@ void ReportViewer::exportExternalPrompt()
 
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::warning(
+        DialogUtils::warning(
             this, UiLanguage::text("Export failed", "导出失败"),
             UiLanguage::text("Could not write to file: ", "无法写入文件：") + path);
         return;
@@ -169,6 +172,17 @@ void ReportViewer::refresh()
     }
 }
 
+void ReportViewer::handleReportDeleted(int64_t reportId)
+{
+    if (m_currentReportId != reportId) return;
+    m_currentReportId = -1;
+    m_currentContent.clear();
+    m_browser->clear();
+    m_statusLabel->setText(UiLanguage::text(
+        "The loaded report was deleted from history.",
+        "当前载入的报告已从历史记录中删除。"));
+}
+
 void ReportViewer::onGenerationCompleted(const ReportResult &result)
 {
     m_currentContent = result.contentMd;
@@ -186,20 +200,20 @@ void ReportViewer::onGenerationFailed(const QString &error)
 {
     m_statusLabel->setText(UiLanguage::text(
         QString("Error: %1").arg(error), QString("错误：%1").arg(error)));
-    QMessageBox::warning(
+    DialogUtils::warning(
         this, UiLanguage::text("Report generation failed", "报告生成失败"), error);
 }
 
 void ReportViewer::exportToFile()
 {
     if (m_currentContent.isEmpty()) {
-        QMessageBox::information(
+        DialogUtils::information(
             this, UiLanguage::text("No report", "没有报告"),
             UiLanguage::text("Generate or load a report first.", "请先生成或载入报告。"));
         return;
     }
 
-    QString path = QFileDialog::getSaveFileName(
+    const QString path = DialogUtils::saveFile(
         this, UiLanguage::text("Export report", "导出报告"),
         "daily_report.md", "Markdown (*.md)");
     if (path.isEmpty()) return;
@@ -212,7 +226,7 @@ void ReportViewer::exportToFile()
         m_statusLabel->setText(UiLanguage::text(
             "Report exported to: " + path, "报告已导出到：" + path));
     } else {
-        QMessageBox::warning(
+        DialogUtils::warning(
             this, UiLanguage::text("Export failed", "导出失败"),
             UiLanguage::text("Could not write to file: ", "无法写入文件：") + path);
     }

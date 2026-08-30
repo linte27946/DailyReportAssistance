@@ -30,6 +30,7 @@ public:
 public slots:
     void onGenerationCompleted(const ReportResult &result);
     void onGenerationFailed(const QString &error);
+    void handleReportDeleted(int64_t reportId);
 
 private:
     void setupUi();

@@ -170,7 +170,13 @@ public:
                           query.lastError().text().toStdString());
             return false;
         }
-        return true;
+        const bool deleted = query.numRowsAffected() == 1;
+        if (deleted) {
+            spdlog::info("Deleted report (id={}).", id);
+        } else {
+            spdlog::warn("Report deletion requested for missing id={}", id);
+        }
+        return deleted;
     }
 
     /// Delete reports whose covered date is older than the cutoff date.

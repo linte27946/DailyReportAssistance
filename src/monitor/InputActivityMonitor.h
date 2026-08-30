@@ -25,10 +25,12 @@ public:
 
 private:
     void checkActivity();
+    void emitStateSnapshot(const QDateTime &timestamp, const QString &reason);
 
     QTimer *m_checkTimer = nullptr;
     bool m_isIdle = false;
     QDateTime m_idleStartTime;
+    QDate m_lastStateEmissionDate;
     int m_afkThresholdSecs = 300;  // 5 minutes default
     static constexpr int kCheckIntervalMs = 5000;  // Check every 5 seconds
 };

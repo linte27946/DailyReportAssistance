@@ -26,6 +26,7 @@ bool isReportWorthy(EventType type)
     case EventType::GitMerge:
     case EventType::BuildStarted:
     case EventType::BuildCompleted:
+    case EventType::MeetingAttended:
         return true;
     default:
         return false;
@@ -172,6 +173,13 @@ QMap<QString, QString> TemplateEngine::buildReportContext(
     ctx["git_commit_count"] = QString::number(summary.gitCommitCount);
     ctx["build_count"] = QString::number(summary.buildCount);
     ctx["build_failure_count"] = QString::number(summary.buildFailureCount);
+    ctx["meeting_count"] = QString::number(summary.meetingCount);
+    ctx["meeting_hours"] = QString::number(
+        summary.meetingDurationSecs / 3600.0, 'f', 1);
+    QStringList meetingLines;
+    for (const QString &meeting : summary.meetings)
+        meetingLines.append(QString("- %1").arg(meeting));
+    ctx["meeting_context"] = listOrNone(meetingLines);
 
     // Category breakdown
     QStringList categories;
@@ -204,13 +212,22 @@ QMap<QString, QString> TemplateEngine::buildReportContext(
     QStringList research;
     QStringList documents;
     QStringList webPages;
+    QStringList distractions;
     QSet<QString> developmentSeen;
     QSet<QString> editorSeen;
     QSet<QString> researchSeen;
     QSet<QString> documentSeen;
     QSet<QString> webSeen;
+    QSet<QString> distractionSeen;
     for (const auto &event : timeline.events()) {
         if (!isReportWorthy(event.type)) continue;
+        // Meeting candidates are exposed only through ActivitySummary after
+        // the strict idle-ratio rule has accepted them.
+        if (event.type == EventType::MeetingAttended) continue;
+        if (event.category == EventCategory::Distraction) {
+            appendUnique(distractions, distractionSeen, event, 40);
+            continue;
+        }
         if (event.type == EventType::EditorContextChanged)
             appendUnique(editorContexts, editorSeen, event, 40);
         if (event.type == EventType::DocumentViewed)
@@ -218,10 +235,9 @@ QMap<QString, QString> TemplateEngine::buildReportContext(
         if (event.type == EventType::UrlVisited)
             appendUnique(webPages, webSeen, event, 40);
         if (event.category == EventCategory::Documentation
-            || event.category == EventCategory::Browsing
             || event.type == EventType::DocumentViewed) {
             appendUnique(research, researchSeen, event, 50);
-        } else {
+        } else if (event.type != EventType::UrlVisited) {
             appendUnique(development, developmentSeen, event, 60);
         }
     }
@@ -230,12 +246,14 @@ QMap<QString, QString> TemplateEngine::buildReportContext(
     ctx["research_context"] = listOrNone(research);
     ctx["documents_viewed"] = listOrNone(documents);
     ctx["web_pages"] = listOrNone(webPages);
+    ctx["distraction_context"] = listOrNone(distractions);
 
     // Build a simple timeline table
     QStringList timelineRows;
     const auto &events = timeline.events();
     for (const auto &e : events) {
         if (!isReportWorthy(e.type) || timelineRows.size() >= 80) continue;
+        if (e.type == EventType::MeetingAttended) continue;
         timelineRows.append(QString("| %1 | %2 | %3 | %4 |")
                                 .arg(e.timestamp.toLocalTime().toString("HH:mm:ss"))
                                 .arg(eventCategoryToString(e.category))
@@ -263,7 +281,8 @@ QMap<QString, QString> TemplateEngine::buildWeeklyContext(
     ctx["week_start"] = weekStart.toString("yyyy-MM-dd");
     ctx["week_end"] = weekStart.addDays(6).toString("yyyy-MM-dd");
 
-    int totalActive = 0, totalFiles = 0, totalCommits = 0, totalBuilds = 0, totalBuildFailures = 0;
+    int totalActive = 0, totalFiles = 0, totalCommits = 0, totalBuilds = 0;
+    int totalBuildFailures = 0, totalMeetings = 0, totalMeetingSecs = 0;
     QStringList dailyLines;
 
     for (const auto &[date, summary] : dailySummaries) {
@@ -272,6 +291,8 @@ QMap<QString, QString> TemplateEngine::buildWeeklyContext(
         totalCommits += summary.gitCommitCount;
         totalBuilds += summary.buildCount;
         totalBuildFailures += summary.buildFailureCount;
+        totalMeetings += summary.meetingCount;
+        totalMeetingSecs += summary.meetingDurationSecs;
 
         dailyLines.append(QString("| %1 | %2 | %3h | %4 files | %5 commits | %6 builds |")
                               .arg(date.toString("MM-dd"))
@@ -287,6 +308,9 @@ QMap<QString, QString> TemplateEngine::buildWeeklyContext(
     ctx["total_git_commits"] = QString::number(totalCommits);
     ctx["total_builds"] = QString::number(totalBuilds);
     ctx["total_build_failures"] = QString::number(totalBuildFailures);
+    ctx["total_meeting_count"] = QString::number(totalMeetings);
+    ctx["total_meeting_hours"] = QString::number(
+        totalMeetingSecs / 3600.0, 'f', 1);
 
     ctx["daily_table"] = "| Date | Day | Active | Files | Commits | Builds |\n"
                          "|------|-----|--------|-------|---------|--------|\n" +
@@ -306,6 +330,8 @@ Group related activities together. Mention specific files worked on and any nota
 **Report Date:** {{date}} ({{weekday}})
 **Total Active Time:** {{active_hours}} hours
 **Idle Time:** {{idle_hours}} hours
+
+The totals above are de-duplicated wall-clock measurements. Individual event durations may overlap and must not be added together.
 
 ## Activity Summary
 
@@ -336,6 +362,12 @@ Group related activities together. Mention specific files worked on and any nota
 
 ## Browser Pages
 {{web_pages}}
+
+## Meetings
+{{meeting_context}}
+
+## Personal / Entertainment Activity
+{{distraction_context}}
 
 ## Activity Timeline
 {{timeline_table}}
@@ -371,6 +403,7 @@ The report should summarize the week's accomplishments, highlight key metrics, a
 - Files Edited: {{total_file_edits}}
 - Git Commits: {{total_git_commits}}
 - Builds: {{total_builds}} ({{total_build_failures}} failures)
+- Meetings: {{total_meeting_count}} ({{total_meeting_hours}} hours of qualifying idle time)
 
 ---
 

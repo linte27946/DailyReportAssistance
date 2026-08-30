@@ -1,11 +1,13 @@
 add_library(dailyreport_ui STATIC
     AppIcon.cpp
+    DialogUtils.cpp
     UiLanguage.cpp
     SystemTray.cpp
     MainWindow.cpp
     SettingsDialog.cpp
     ReportViewer.cpp
     ReportHistoryWidget.cpp
+    ReportDeleteDialog.cpp
     TimelineWidget.cpp
     SetupWizard.cpp
 )
@@ -16,6 +18,7 @@ target_link_libraries(dailyreport_ui PUBLIC
     dailyreport_app
     dailyreport_report
     dailyreport_storage
+    dailyreport_monitor
     dailyreport_util
     Qt6::Core
     Qt6::Widgets

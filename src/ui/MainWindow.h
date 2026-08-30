@@ -15,6 +15,7 @@ class EventRepository;
 class ReportRepository;
 class SettingsRepository;
 class DataRetentionService;
+class WeComMeetingMonitor;
 
 /// Main application window with stacked views for reports, settings, and timeline.
 class MainWindow : public QMainWindow {
@@ -27,6 +28,7 @@ public:
                         ReportRepository *reportRepo,
                         SettingsRepository *settingsRepo,
                         DataRetentionService *retentionService,
+                        WeComMeetingMonitor *weComMeetingMonitor,
                         QWidget *parent = nullptr);
 
     /// Switch to the report viewer tab.

@@ -55,6 +55,28 @@ private slots:
         QVERIFY(BrowserUrlMonitor::sanitizeUrl("file:///private/report.pdf").isEmpty());
     }
 
+    void recognizesEntertainmentPagesWithoutMislabelingTutorials()
+    {
+        QCOMPARE(BrowserUrlMonitor::distractionKind(
+                     "https://www.douyu.com/12345", "某游戏直播间"),
+                 QString("live_stream"));
+        QCOMPARE(BrowserUrlMonitor::distractionKind(
+                     "https://live.bilibili.com/789", "Live"),
+                 QString("live_stream"));
+        QCOMPARE(BrowserUrlMonitor::distractionKind(
+                     "https://store.steampowered.com/app/570", "Dota 2"),
+                 QString("gaming"));
+        QCOMPARE(BrowserUrlMonitor::distractionKind(
+                     "https://www.iqiyi.com/v_abc.html", "电视剧"),
+                 QString("video"));
+        QVERIFY(BrowserUrlMonitor::distractionKind(
+                    "https://developer.mozilla.org/docs/Web/CSS/grid",
+                    "CSS grid tutorial").isEmpty());
+        QVERIFY(BrowserUrlMonitor::distractionKind(
+                    "https://www.youtube.com/watch?v=css",
+                    "Modern CSS tutorial").isEmpty());
+    }
+
     void usesCurrentDeepSeekDefaults()
     {
         const LlmConfig config = LlmConfig::deepSeekDefault();

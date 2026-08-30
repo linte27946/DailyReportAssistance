@@ -7,6 +7,7 @@ add_library(dailyreport_monitor STATIC
     WorkContextMonitor.cpp
     InputActivityMonitor.cpp
     BrowserUrlMonitor.cpp
+    WeComMeetingMonitor.cpp
     GitMonitor.cpp
     BuildMonitor.cpp
 )

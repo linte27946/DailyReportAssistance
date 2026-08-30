@@ -4,6 +4,23 @@
 #include <QUrl>
 #include <spdlog/spdlog.h>
 
+namespace {
+
+bool domainMatches(const QString &host, const QString &domain)
+{
+    return host == domain || host.endsWith("." + domain);
+}
+
+bool containsAny(const QString &text, const QStringList &values)
+{
+    for (const QString &value : values) {
+        if (text.contains(value, Qt::CaseInsensitive)) return true;
+    }
+    return false;
+}
+
+} // namespace
+
 #ifdef _WIN32
 #include <psapi.h>
 #endif
@@ -108,6 +125,14 @@ void BrowserUrlMonitor::pollBrowserUrl()
     const QString pageKey = url + "|" + pageTitle;
     if (pageKey == "|" || pageKey == m_currentPageKey) return;
 
+    const QString entertainmentKind = distractionKind(url, pageTitle);
+    if (!entertainmentKind.isEmpty() && !m_trackDistractions) {
+        // Keep the generic foreground observation used for wall-clock timing,
+        // but do not create a URL-level entertainment record without consent.
+        m_currentPageKey = pageKey;
+        return;
+    }
+
     m_currentPageKey = pageKey;
 
     // Deduplicate: skip URLs we've recently seen
@@ -141,6 +166,13 @@ void BrowserUrlMonitor::pollBrowserUrl()
     event.metadata["pageTitle"] = pageTitle;
     event.metadata["processName"] = info.processName;
     event.metadata["queryCaptured"] = m_captureFullUrl;
+    if (!entertainmentKind.isEmpty()) {
+        event.metadata["isDistraction"] = true;
+        event.metadata["distractionKind"] = entertainmentKind;
+        event.description = QString("Entertainment page: %1%2")
+            .arg(pageTitle.isEmpty() ? host : pageTitle,
+                 host.isEmpty() ? QString() : QString(" (%1)").arg(host));
+    }
 
     // Check if it's a documentation URL
     {
@@ -168,6 +200,51 @@ QString BrowserUrlMonitor::sanitizeUrl(const QString &url, bool includeQuery)
     parsed.setFragment({});
     if (!includeQuery) parsed.setQuery({});
     return parsed.toString(QUrl::FullyEncoded);
+}
+
+QString BrowserUrlMonitor::distractionKind(const QString &url,
+                                           const QString &pageTitle)
+{
+    const QUrl parsed(url);
+    const QString host = parsed.host().toLower();
+    const QString path = parsed.path().toLower();
+    const QString combined = pageTitle + " " + path;
+
+    const QStringList liveDomains = {
+        "douyu.com", "huya.com", "twitch.tv", "live.bilibili.com",
+        "live.douyin.com", "cc.163.com", "yy.com"
+    };
+    for (const QString &domain : liveDomains) {
+        if (domainMatches(host, domain)) return "live_stream";
+    }
+    if (containsAny(combined,
+                    {"游戏直播", "直播间", "game stream", "gaming live",
+                     "live stream", "正在直播"})) {
+        return "live_stream";
+    }
+
+    const QStringList videoDomains = {
+        "iqiyi.com", "v.qq.com", "youku.com", "mgtv.com", "netflix.com",
+        "disneyplus.com", "primevideo.com"
+    };
+    for (const QString &domain : videoDomains) {
+        if (domainMatches(host, domain)) return "video";
+    }
+
+    const QStringList gamingDomains = {
+        "steampowered.com", "steamcommunity.com", "epicgames.com",
+        "ign.com", "gamespot.com", "gamersky.com", "3dmgame.com"
+    };
+    for (const QString &domain : gamingDomains) {
+        if (domainMatches(host, domain)) return "gaming";
+    }
+    if ((domainMatches(host, "bilibili.com")
+         || domainMatches(host, "youtube.com"))
+        && containsAny(combined, {"游戏", "gameplay", "gaming", "电竞"})) {
+        return "gaming";
+    }
+
+    return {};
 }
 
 bool BrowserUrlMonitor::isBrowserWindow(const QString &processName)

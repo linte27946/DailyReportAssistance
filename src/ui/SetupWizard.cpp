@@ -1,5 +1,6 @@
 #include "SetupWizard.h"
 #include "UiLanguage.h"
+#include "DialogUtils.h"
 #include "storage/SettingsRepository.h"
 #include "util/CryptoUtils.h"
 #include <QVBoxLayout>
@@ -8,7 +9,6 @@
 #include <QComboBox>
 #include <QListWidget>
 #include <QPushButton>
-#include <QFileDialog>
 #include <QCheckBox>
 #include <QFormLayout>
 #include <QJsonArray>
@@ -35,6 +35,10 @@ SetupWizard::SetupWizard(SettingsRepository *settings, QWidget *parent)
     UiLanguage::bindWindowTitle(this,
                                 "DailyReport - Setup wizard", "DailyReport - 初始设置");
     setMinimumSize(600, 450);
+    resize(760, 540);
+    setWizardStyle(QWizard::ModernStyle);
+    setOption(QWizard::NoBackButtonOnStartPage, true);
+    DialogUtils::applyStyle(this);
 
     addPage(createWelcomePage());
     addPage(createMonitoringPage());
@@ -95,8 +99,8 @@ QWizardPage *SetupWizard::createMonitoringPage()
     btnLayout->addStretch();
 
     connect(addBtn, &QPushButton::clicked, page, [this]() {
-        QString dir = QFileDialog::getExistingDirectory(
-            nullptr, UiLanguage::text("Select project directory", "选择项目目录"));
+        const QString dir = DialogUtils::selectDirectory(
+            this, UiLanguage::text("Select project directory", "选择项目目录"));
         if (!dir.isEmpty()) m_projectPaths->addItem(dir);
     });
     connect(removeBtn, &QPushButton::clicked, page, [this]() {

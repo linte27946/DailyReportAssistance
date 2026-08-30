@@ -4,6 +4,7 @@
 #include "SettingsDialog.h"
 #include "TimelineWidget.h"
 #include "UiLanguage.h"
+#include "DialogUtils.h"
 #include "report/TemplateEngine.h"
 #include "report/ReportGenerator.h"
 #include "storage/EventRepository.h"
@@ -20,7 +21,6 @@
 #include <QCloseEvent>
 #include <QApplication>
 #include <QSystemTrayIcon>
-#include <QMessageBox>
 #include <QStyle>
 #include <spdlog/spdlog.h>
 
@@ -30,6 +30,7 @@ MainWindow::MainWindow(TemplateEngine *templateEngine,
                        ReportRepository *reportRepo,
                        SettingsRepository *settingsRepo,
                        DataRetentionService *retentionService,
+                       WeComMeetingMonitor *weComMeetingMonitor,
                        QWidget *parent)
     : QMainWindow(parent)
     , m_templateEngine(templateEngine)
@@ -45,11 +46,17 @@ MainWindow::MainWindow(TemplateEngine *templateEngine,
     m_reportViewer = new ReportViewer(reportGenerator, reportRepo, this);
     m_historyWidget = new ReportHistoryWidget(reportRepo, this);
     m_settingsDialog = new SettingsDialog(
-        settingsRepo, templateEngine, retentionService, this);
+        settingsRepo, templateEngine, retentionService,
+        weComMeetingMonitor, this);
     m_timelineWidget = new TimelineWidget(eventRepo, this);
 
     connect(m_historyWidget, &ReportHistoryWidget::reportSelected,
-            m_reportViewer, &ReportViewer::loadReport);
+            this, [this](int64_t reportId) {
+        m_reportViewer->loadReport(reportId);
+        showReportViewer();
+    });
+    connect(m_historyWidget, &ReportHistoryWidget::reportDeleted,
+            m_reportViewer, &ReportViewer::handleReportDeleted);
     connect(m_settingsDialog, &SettingsDialog::settingsSaved,
             this, &MainWindow::settingsSaved);
     connect(m_settingsDialog, &SettingsDialog::settingsSaved, this, [this]() {
@@ -342,6 +349,48 @@ void MainWindow::setupUi()
             font-weight: 600;
             border-bottom-color: #356ae6;
         }
+        QTabWidget#settingsTabs::pane {
+            border: 1px solid #dfe5ee;
+            border-radius: 10px;
+            background: #ffffff;
+            top: -1px;
+        }
+        QTabWidget#settingsTabs QTabBar::tab {
+            min-width: 84px;
+            min-height: 24px;
+            padding: 9px 12px;
+            margin: 0 3px 7px 0;
+            color: #5f6c81;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            border-radius: 8px;
+        }
+        QTabWidget#settingsTabs QTabBar::tab:hover {
+            color: #2859cf;
+            background: #f1f5fd;
+        }
+        QTabWidget#settingsTabs QTabBar::tab:selected {
+            color: #2859cf;
+            background: #eaf1ff;
+            border-bottom-color: #356ae6;
+            font-weight: 600;
+        }
+        QScrollArea#settingsScrollArea,
+        QScrollArea#settingsScrollArea > QWidget > QWidget {
+            background: #ffffff;
+            border: none;
+        }
+        QFrame#settingsFooter {
+            background: #f8faff;
+            border: 1px solid #dfe5ee;
+            border-radius: 9px;
+        }
+        QLabel#settingsSaveStatus {
+            color: #237154;
+            font-weight: 600;
+            padding-left: 4px;
+        }
         QGroupBox {
             color: #27344b;
             background: #fbfcfe;
@@ -372,6 +421,43 @@ void MainWindow::setupUi()
             padding: 9px 11px;
             font-weight: 400;
         }
+        QLabel#integrationCommand {
+            color: #dbe7ff;
+            background: #1c2940;
+            border-radius: 7px;
+            padding: 10px 12px;
+            font-family: Consolas, monospace;
+        }
+        QLabel#integrationStatus {
+            color: #526179;
+            background: #f2f5f9;
+            border: 1px solid #e0e5ed;
+            border-radius: 7px;
+            padding: 9px 11px;
+        }
+        QLabel#integrationStatus[state="success"],
+        QLabel#integrationStatus[state="ready"] {
+            color: #237154;
+            background: #e9f7f1;
+            border-color: #c9e9dc;
+            font-weight: 600;
+        }
+        QLabel#integrationStatus[state="warning"] {
+            color: #8a551c;
+            background: #fff7e8;
+            border-color: #f0d5a8;
+        }
+        QLabel#integrationStatus[state="error"] {
+            color: #a33d3d;
+            background: #fff0f0;
+            border-color: #efcaca;
+        }
+        QLabel#integrationStatus[state="checking"],
+        QLabel#integrationStatus[state="syncing"] {
+            color: #2f5f9f;
+            background: #edf4ff;
+            border-color: #cbdcf7;
+        }
         QLabel#summaryBadge {
             color: #526179;
             background: #eef2f8;
@@ -379,6 +465,75 @@ void MainWindow::setupUi()
             padding: 5px 10px;
             font-size: 11px;
         }
+        QLabel#inlineSuccess {
+            color: #237154;
+            background: #e9f7f1;
+            border: 1px solid #c9e9dc;
+            border-radius: 7px;
+            padding: 9px 11px;
+            font-weight: 600;
+        }
+        QLabel#toolbarLabel { color: #5d697d; font-weight: 600; }
+        QFrame#timelineDatePicker {
+            background: #ffffff;
+            border: 1px solid #d7deea;
+            border-radius: 9px;
+        }
+        QFrame#timelineDatePicker:hover { border-color: #aab8ce; }
+        QToolButton#dateNavButton {
+            min-width: 28px;
+            min-height: 28px;
+            padding: 0;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+        }
+        QToolButton#dateNavButton:hover { background: #edf3ff; }
+        QToolButton#dateNavButton:disabled { background: transparent; }
+        QDateEdit#timelineDateEdit {
+            min-height: 30px;
+            border: none;
+            border-left: 1px solid #edf0f5;
+            border-right: 1px solid #edf0f5;
+            border-radius: 0;
+            background: transparent;
+            color: #24324a;
+            font-weight: 600;
+            padding: 0 8px;
+        }
+        QDateEdit#timelineDateEdit:focus { border: none; border-left: 1px solid #83a5f6; border-right: 1px solid #83a5f6; }
+        QDateEdit#timelineDateEdit::drop-down {
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 24px;
+            border: none;
+        }
+        QCalendarWidget QWidget { background: #ffffff; color: #263248; }
+        QCalendarWidget QWidget#qt_calendar_navigationbar {
+            background: #356ae6;
+            min-height: 38px;
+        }
+        QCalendarWidget QToolButton {
+            color: #ffffff;
+            background: transparent;
+            border: none;
+            font-weight: 600;
+        }
+        QCalendarWidget QMenu { background: #ffffff; color: #263248; }
+        QCalendarWidget QAbstractItemView {
+            outline: none;
+            selection-background-color: #356ae6;
+            selection-color: #ffffff;
+        }
+        QCheckBox#privacyOption {
+            color: #8a551c;
+            background: #fff7e8;
+            border: 1px solid #f0d5a8;
+            border-radius: 7px;
+            padding: 8px 10px;
+        }
+        QMessageBox { background: #f7f9fc; }
+        QMessageBox QLabel { color: #263248; min-width: 320px; }
         QTableWidget {
             background: #ffffff;
             alternate-background-color: #f8faff;
@@ -435,7 +590,7 @@ void MainWindow::createMenuBar()
     QMenu *helpMenu = menuBar()->addMenu("&Help");
     UiLanguage::bindText(helpMenu, "&Help", "帮助(&H)");
     QAction *aboutAction = helpMenu->addAction("", this, [this]() {
-        QMessageBox::about(
+        DialogUtils::information(
             this,
             UiLanguage::text("About DailyReport", "关于 DailyReport"),
             UiLanguage::text(

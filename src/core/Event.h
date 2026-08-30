@@ -69,6 +69,7 @@ struct ActivityEvent {
     QString url;
     int durationSecs = 0;       // Duration in seconds (0 = instantaneous)
     QString sessionId;          // UUID linking events to a login session
+    QString externalId;         // Stable ID supplied by an external integration
     QJsonObject metadata;       // Flexible extra data (git hash, build status, etc.)
 
     QJsonObject toJson() const
@@ -87,6 +88,7 @@ struct ActivityEvent {
         obj["url"] = url;
         obj["durationSecs"] = durationSecs;
         obj["sessionId"] = sessionId;
+        obj["externalId"] = externalId;
         obj["metadata"] = metadata;
         return obj;
     }
@@ -107,6 +109,7 @@ struct ActivityEvent {
         e.url = obj["url"].toString();
         e.durationSecs = obj["durationSecs"].toInt();
         e.sessionId = obj["sessionId"].toString();
+        e.externalId = obj["externalId"].toString();
         e.metadata = obj["metadata"].toObject();
         return e;
     }
@@ -122,6 +125,9 @@ struct ActivitySummary {
     int gitCommitCount = 0;
     int buildCount = 0;
     int buildFailureCount = 0;
+    int meetingCount = 0;
+    int meetingDurationSecs = 0;
+    QStringList meetings;
     QStringList topFiles;                             // Most edited files
     QStringList topApplications;                      // Most used applications
 
@@ -142,6 +148,12 @@ struct ActivitySummary {
         obj["gitCommitCount"] = gitCommitCount;
         obj["buildCount"] = buildCount;
         obj["buildFailureCount"] = buildFailureCount;
+        obj["meetingCount"] = meetingCount;
+        obj["meetingDurationSecs"] = meetingDurationSecs;
+
+        QJsonArray meetingValues;
+        for (const auto &meeting : meetings) meetingValues.append(meeting);
+        obj["meetings"] = meetingValues;
 
         QJsonObject catDurations;
         for (auto it = categoryDurationSecs.begin(); it != categoryDurationSecs.end(); ++it) {

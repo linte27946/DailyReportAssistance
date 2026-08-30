@@ -46,6 +46,9 @@ private slots:
         SettingsRepository settings;
         QCOMPARE(settings.getInt("activity_retention_months"), 3);
         QCOMPARE(settings.getInt("report_retention_months"), 3);
+        QVERIFY(!settings.getBool("distraction_tracking_enabled", true));
+        QVERIFY(!settings.getBool("wecom_meeting_enabled", true));
+        QCOMPARE(settings.getInt("wecom_meeting_idle_threshold_percent"), 30);
     }
 
     void testEventInsertAndQuery()
@@ -78,6 +81,23 @@ private slots:
         EventRepository repo;
         int deleted = repo.pruneOlderThan(QDate::currentDate().addDays(365));
         QVERIFY(deleted >= 0); // Should not crash
+    }
+
+    void testExternalMeetingEventIsIdempotent()
+    {
+        EventRepository repo;
+        const int64_t before = repo.eventCount();
+        ActivityEvent meeting;
+        meeting.timestamp = QDateTime::currentDateTimeUtc();
+        meeting.endTimestamp = meeting.timestamp.addSecs(1800);
+        meeting.type = EventType::MeetingAttended;
+        meeting.category = EventCategory::Meeting;
+        meeting.description = "WeCom meeting: review";
+        meeting.externalId = "wecom:test:stable-id";
+
+        QVERIFY(repo.insertBatch({meeting}));
+        QVERIFY(repo.insertBatch({meeting}));
+        QCOMPARE(repo.eventCount(), before + 1);
     }
 
     void testRetentionServiceCleansBothStores()
@@ -128,6 +148,21 @@ private slots:
         QCOMPARE(deleted, 1);
         QVERIFY(!repo.reportExists(oldDate, "daily"));
         QVERIFY(repo.reportExists(recentDate, "daily"));
+    }
+
+    void testDeleteSpecificReport()
+    {
+        ReportRepository repo;
+        const QDate date = QDate::currentDate();
+        const int64_t id = repo.saveReport(
+            "daily", date, "Report selected for deletion", "content",
+            "test", "test");
+        QVERIFY(id > 0);
+        QCOMPARE(repo.getReport(id).id, id);
+
+        QVERIFY(repo.deleteReport(id));
+        QCOMPARE(repo.getReport(id).id, int64_t(0));
+        QVERIFY(!repo.deleteReport(id));
     }
 
 private:

@@ -14,6 +14,7 @@ The report should summarize the week's accomplishments, highlight key metrics, a
 - Files Edited: {{total_file_edits}}
 - Git Commits: {{total_git_commits}}
 - Builds: {{total_builds}} ({{total_build_failures}} failures)
+- Meetings: {{total_meeting_count}} ({{total_meeting_hours}} hours of qualifying idle time)
 
 ---
 

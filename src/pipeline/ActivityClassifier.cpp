@@ -125,6 +125,10 @@ void ActivityClassifier::initDefaultRules()
         {"", "", "", EventType::BuildStarted, EventCategory::Building, 100, ""},
         {"", "", "", EventType::BuildCompleted, EventCategory::Building, 100, ""},
 
+        // Actual WeCom attendance. Timeline summary applies the low-priority
+        // idle-ratio rule before any of this duration is counted as work.
+        {"", "", "", EventType::MeetingAttended, EventCategory::Meeting, 100, ""},
+
         // Idle events
         {"", "", "", EventType::UserIdle, EventCategory::Idle, 100, ""},
         {"", "", "", EventType::UserActive, EventCategory::Coding, 5, ""},
@@ -193,6 +197,12 @@ ActivityEvent ActivityClassifier::classify(const RawEvent &raw)
     event.filePath = raw.filePath;
     event.url = raw.url;
     event.metadata = raw.metadata;
+    event.externalId = raw.metadata.value("externalId").toString();
+
+    const QDateTime endTime = QDateTime::fromString(
+        raw.metadata.value("endTime").toString(), Qt::ISODateWithMs);
+    if (endTime.isValid())
+        event.endTimestamp = endTime;
 
     if (!raw.filePath.isEmpty()) {
         QFileInfo fi(raw.filePath);
@@ -218,6 +228,9 @@ QList<ActivityEvent> ActivityClassifier::classifyBatch(const QList<RawEvent> &ra
 EventCategory ActivityClassifier::classifyInternal(const RawEvent &raw)
 {
     ensureRulesSorted();
+
+    if (raw.metadata.value("isDistraction").toBool())
+        return EventCategory::Distraction;
 
     if (raw.type == EventType::UrlVisited
         && raw.metadata.value("isDocumentation").toBool()) {

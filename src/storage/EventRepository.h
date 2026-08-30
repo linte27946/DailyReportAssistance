@@ -24,14 +24,14 @@ public:
         QSqlQuery query(db);
 
         query.prepare(
-            "INSERT INTO activity_events "
+            "INSERT OR IGNORE INTO activity_events "
             "(timestamp, end_timestamp, event_type, category, description, "
             " application, window_title, file_path, file_extension, url, "
-            " duration_secs, metadata_json, session_id) "
+            " duration_secs, metadata_json, session_id, external_id) "
             "VALUES "
             "(:timestamp, :end_timestamp, :event_type, :category, :description, "
             " :application, :window_title, :file_path, :file_extension, :url, "
-            " :duration_secs, :metadata_json, :session_id)"
+            " :duration_secs, :metadata_json, :session_id, :external_id)"
         );
 
         db.transaction();
@@ -54,6 +54,8 @@ public:
             query.bindValue(":duration_secs", e.durationSecs);
             query.bindValue(":metadata_json", JsonUtils::toString(e.metadata));
             query.bindValue(":session_id", e.sessionId);
+            query.bindValue(":external_id",
+                            e.externalId.isEmpty() ? QVariant() : e.externalId);
 
             if (!query.exec()) {
                 spdlog::error("Failed to insert event: {}",
@@ -85,9 +87,11 @@ public:
         query.prepare(
             "SELECT id, timestamp, end_timestamp, event_type, category, description, "
             "       application, window_title, file_path, file_extension, url, "
-            "       duration_secs, metadata_json, session_id "
+            "       duration_secs, metadata_json, session_id, external_id "
             "FROM activity_events "
-            "WHERE timestamp >= :start AND timestamp < :end "
+            "WHERE timestamp < :end "
+            "  AND (timestamp >= :start "
+            "       OR (end_timestamp IS NOT NULL AND end_timestamp >= :start)) "
             "ORDER BY timestamp ASC"
         );
         const QDateTime startUtc = QDateTime(
@@ -121,6 +125,7 @@ public:
             e.url = query.value("url").toString();
             e.durationSecs = query.value("duration_secs").toInt();
             e.sessionId = query.value("session_id").toString();
+            e.externalId = query.value("external_id").toString();
             e.metadata = QJsonDocument::fromJson(
                 query.value("metadata_json").toString().toUtf8()).object();
 

@@ -88,6 +88,7 @@ INSERT OR IGNORE INTO app_settings (key, value) VALUES
     ('git_tracking_enabled', 'true'),
     ('browser_tracking_enabled', 'true'),
     ('browser_capture_full_url', 'false'),
+    ('distraction_tracking_enabled', 'false'),
     ('editor_tracking_enabled', 'true'),
     ('document_tracking_enabled', 'true'),
     ('build_tracking_enabled', 'true'),

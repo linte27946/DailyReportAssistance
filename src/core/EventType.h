@@ -16,7 +16,9 @@ enum class EventCategory : uint8_t {
     VersionControl, // Git commit, push, pull, merge
     Browsing,       // General web browsing
     Idle,           // No activity detected
-    Other
+    Other,
+    Distraction,    // Optional personal/entertainment activity tracking
+    Meeting         // Confirmed meeting time that fills monitored idle spans
 };
 
 /// Fine-grained event types produced by monitors.
@@ -57,6 +59,7 @@ enum class EventType : uint8_t {
     // Other
     SessionStarted,
     SessionEnded,
+    MeetingAttended,
     Unknown
 };
 
@@ -73,8 +76,10 @@ inline QString eventCategoryToString(EventCategory cat)
     case EventCategory::Communication:  return "Communication";
     case EventCategory::VersionControl: return "Version Control";
     case EventCategory::Browsing:       return "Browsing";
+    case EventCategory::Meeting:        return "Meeting";
     case EventCategory::Idle:           return "Idle";
     case EventCategory::Other:          return "Other";
+    case EventCategory::Distraction:    return "Distraction";
     default:                            return "Unknown";
     }
 }
@@ -102,6 +107,7 @@ inline QString eventTypeToString(EventType type)
     case EventType::GitMerge:           return "GitMerge";
     case EventType::BuildStarted:       return "BuildStarted";
     case EventType::BuildCompleted:     return "BuildCompleted";
+    case EventType::MeetingAttended:    return "MeetingAttended";
     case EventType::SessionStarted:     return "SessionStarted";
     case EventType::SessionEnded:       return "SessionEnded";
     default:                            return "Unknown";
@@ -121,8 +127,10 @@ inline EventCategory eventCategoryFromString(const QString &value)
     if (value == "Communication") return EventCategory::Communication;
     if (value == "Version Control") return EventCategory::VersionControl;
     if (value == "Browsing") return EventCategory::Browsing;
+    if (value == "Meeting") return EventCategory::Meeting;
     if (value == "Idle") return EventCategory::Idle;
     if (value == "Other") return EventCategory::Other;
+    if (value == "Distraction") return EventCategory::Distraction;
     return EventCategory::Unknown;
 }
 
@@ -148,6 +156,7 @@ inline EventType eventTypeFromString(const QString &value)
     if (value == "GitMerge") return EventType::GitMerge;
     if (value == "BuildStarted") return EventType::BuildStarted;
     if (value == "BuildCompleted") return EventType::BuildCompleted;
+    if (value == "MeetingAttended") return EventType::MeetingAttended;
     if (value == "SessionStarted") return EventType::SessionStarted;
     if (value == "SessionEnded") return EventType::SessionEnded;
     return EventType::Unknown;

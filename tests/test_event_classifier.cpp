@@ -68,6 +68,39 @@ private slots:
         QCOMPARE(classifier.classify(event).category, EventCategory::Documentation);
     }
 
+    void testOptedInEntertainmentMetadataHasSeparateCategory()
+    {
+        ActivityClassifier classifier;
+        RawEvent event;
+        event.timestamp = QDateTime::currentDateTimeUtc();
+        event.type = EventType::UrlVisited;
+        event.processName = "chrome.exe";
+        event.url = "https://live.bilibili.com/123";
+        event.metadata["isDistraction"] = true;
+
+        const ActivityEvent result = classifier.classify(event);
+        QCOMPARE(result.category, EventCategory::Distraction);
+        QCOMPARE(eventCategoryFromString(eventCategoryToString(result.category)),
+                 EventCategory::Distraction);
+    }
+
+    void testActualMeetingAttendanceClassifiedAsMeeting()
+    {
+        ActivityClassifier classifier;
+        RawEvent event;
+        event.timestamp = QDateTime::currentDateTimeUtc();
+        event.type = EventType::MeetingAttended;
+        event.metadata["externalId"] = "wecom:test:attendance";
+        event.metadata["endTime"] = event.timestamp.addSecs(1800)
+                                        .toString(Qt::ISODateWithMs);
+        event.metadata["durationSecs"] = 1800;
+
+        const ActivityEvent result = classifier.classify(event);
+        QCOMPARE(result.category, EventCategory::Meeting);
+        QCOMPARE(result.externalId, QString("wecom:test:attendance"));
+        QCOMPARE(result.endTimestamp, event.timestamp.addSecs(1800));
+    }
+
     void testUnknownClassifiedAsOther()
     {
         ActivityClassifier classifier;

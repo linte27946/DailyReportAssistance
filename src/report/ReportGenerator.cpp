@@ -124,6 +124,10 @@ QString ReportGenerator::buildExternalPrompt(const QDate &date, const QString &t
         "Create a clear, concise software-developer work report in %3 using the activity data below. "
         "Write in first person. Group work by project or feature. Separate observed facts from likely "
         "inferences, do not invent accomplishments, and mention research or documents only when present. "
+        "If personal or entertainment activity is present, describe it neutrally in a separate non-work "
+        "section; never present it as technical research or an accomplishment, and do not moralize. "
+        "Treat Total Active Time and the category summary as authoritative de-duplicated wall-clock time. "
+        "Never add individual process, build, or timeline durations together because they may overlap. "
         "Return well-structured Markdown.\n\n"
         "## Collected activity data\n\n%4\n")
         .arg(type, effectiveDate.toString(Qt::ISODate), languageName, activityPrompt);
@@ -201,6 +205,11 @@ ReportResult ReportGenerator::doGenerate(const QDate &date, const QString &type)
             "write clear, concise, and informative work reports. "
             "Respond with well-formatted Markdown. "
             "Use the data provided to create an accurate report. "
+            "If personal or entertainment activity is present, describe it neutrally in a separate "
+            "non-work section. Never present it as technical research or an accomplishment, and do not moralize. "
+            "Treat the supplied total active time and category totals as authoritative "
+            "de-duplicated wall-clock measurements. Never add individual process, build, "
+            "or timeline durations because concurrent events may overlap. "
             "Write the final report in %1."
         ).arg(languageName);
 
