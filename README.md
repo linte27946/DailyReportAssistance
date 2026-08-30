@@ -72,6 +72,27 @@ ctest --test-dir build -C Release --output-on-failure
 
 也可以直接双击仓库根目录的 `run.bat`。它会先编译最新代码、复制 Qt DLL 和插件，再启动 `build\Release\DailyReport.exe`。运行时不能只复制单个 EXE，需保留 `build\Release` 中的 DLL 与插件目录。
 
+### Windows 安装程序
+
+构建机需要先安装 [Inno Setup 7](https://jrsoftware.org/isdl.php)。从系统托盘退出正在运行的 DailyReport，然后执行：
+
+```powershell
+.\run.bat package
+```
+
+该命令会编译 Release 版本、整理全部运行库，并在 `dist` 下生成：
+
+- `DailyReport-Setup-1.0.0.exe`：可发送给用户的标准安装程序；
+- `DailyReport-Setup-1.0.0-SHA256.txt`：安装程序的完整性校验值。
+
+用户双击安装程序后可以选择安装范围和安装目录，可选创建桌面快捷方式；安装完成后会创建开始菜单和系统卸载入口。安装器包含 Qt/SQLite/OpenSSL、Visual C++ 运行库、数据库迁移文件、使用说明和第三方许可证，不包含源码、PDB、开发工具、个人数据库或 API Key。卸载程序默认保留用户数据库和设置，避免误删个人数据。企业微信会议属于可选集成，用户仍需自行安装 Node.js 18+ 和官方 `wecom-cli` 并扫码授权。
+
+如仍需生成解压即用的便携 ZIP，可执行：
+
+```powershell
+.\run.bat portable
+```
+
 ## 首次使用
 
 首次启动会打开配置向导：

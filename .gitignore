@@ -1,5 +1,6 @@
 # ── Build output ──────────────────────────────────
 build/
+dist/
 out/
 obj/
 *.dir/

@@ -202,6 +202,37 @@ if(WIN32)
             "$<TARGET_FILE_DIR:DailyReport>/"
     )
     message(STATUS "Deploy target configured — run: cmake --build build --target deploy")
+
+    # Produce a self-contained portable folder and ZIP. The PowerShell script
+    # also adds the MSVC runtime, database migrations, usage notes and vcpkg
+    # third-party license files, while excluding PDB/source/user data.
+    add_custom_target(package-portable
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/packaging/windows/package-portable.ps1"
+            -Configuration "$<CONFIG>"
+            -SourceDir "${CMAKE_SOURCE_DIR}"
+            -BuildDir "${CMAKE_BINARY_DIR}"
+            -OutputDir "${CMAKE_SOURCE_DIR}/dist"
+            -SkipBuild
+        COMMENT "Creating portable Windows ZIP in dist/..."
+        VERBATIM
+    )
+    add_dependencies(package-portable deploy)
+    message(STATUS "package-portable target configured — creates a distributable ZIP")
+
+    add_custom_target(package-installer
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_SOURCE_DIR}/packaging/windows/package-installer.ps1"
+            -Configuration "$<CONFIG>"
+            -SourceDir "${CMAKE_SOURCE_DIR}"
+            -BuildDir "${CMAKE_BINARY_DIR}"
+            -OutputDir "${CMAKE_SOURCE_DIR}/dist"
+            -SkipPortableBuild
+        COMMENT "Creating selectable-directory Windows installer in dist/..."
+        VERBATIM
+    )
+    add_dependencies(package-installer package-portable)
+    message(STATUS "package-installer target configured — creates a Windows Setup EXE")
 endif()
 
 # ---- clean-all : remove build outputs, keep cache---
@@ -242,6 +273,8 @@ add_custom_target(targets
     COMMAND ${CMAKE_COMMAND} -E echo ""
     COMMAND ${CMAKE_COMMAND} -E echo "  Available targets:"
     COMMAND ${CMAKE_COMMAND} -E echo "    deploy      Copy Qt plugins + DLLs to output"
+    COMMAND ${CMAKE_COMMAND} -E echo "    package-portable  Create portable Windows folder + ZIP"
+    COMMAND ${CMAKE_COMMAND} -E echo "    package-installer Create Windows Setup EXE (requires Inno Setup)"
     COMMAND ${CMAKE_COMMAND} -E echo "    clean-all   Remove build outputs, keep CMake cache"
     COMMAND ${CMAKE_COMMAND} -E echo "    distclean   Remove entire build directory"
     COMMAND ${CMAKE_COMMAND} -E echo "    format      Run clang-format on all sources"
